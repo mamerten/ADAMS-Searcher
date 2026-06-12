@@ -45,7 +45,7 @@ HUMAN GATES — IMPORTANT: Honor the skill's two checkpoints. At Phase 3 (confir
 
 COST HEADS-UP AT THE PHASE 5 GATE: reading documents is the only expensive step. When you pause at the Phase 5 gate, give a short cost summary (3–4 lines) immediately before the "Reply 'go'" prompt:
 1. Break the pending document count by tier: ★★★ HIGH: N docs · ★★ MEDIUM: N docs · ★ LOW: N docs
-2. Estimate total new input tokens (assume ~10,000 tokens per document as a midpoint; note the range is ~5,000–15,000)
+2. Estimate total Phase 6 input tokens. IMPORTANT: by Phase 6 every document-reading call re-sends the full conversation history (Phase 1–5: all searches, results, and triage) as non-cached input — typically 50,000–120,000 tokens per call — PLUS the document content (~10,000 tokens per document, range 5,000–15,000). Use ~80,000 tokens per document call as a realistic all-in midpoint: total ≈ N docs × 80,000 tokens. Do NOT use just N × 10,000 — that undercounts by roughly 8×.
 3. Calculate a rough dollar cost using these approximate API input-token rates — show the figure for the current model (from GENERATION CONTEXT) and the other for comparison:
    - Claude Haiku 4.5: ~$0.80 per 1M input tokens
    - Claude Sonnet 4.6: ~$3.00 per 1M input tokens

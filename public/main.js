@@ -172,13 +172,16 @@ function appendUserBubble(text) {
 
 function appendAssistantText(text) {
   if (!text) return;
+  // Only show Save as PDF on the final report, which the preamble forces to start with "# " (H1 title).
+  // Intermediate messages (plan, triage, gate prompts) start with conversational text.
+  const isFinalReport = text.trimStart().startsWith('# ');
   const el = document.createElement('div');
   el.className = 'card assistant-card';
   el.innerHTML = `
     <div class="md-body">${renderMarkdown(text)}</div>
     <div class="card-tools">
       <button class="card-tool btn-copy-md" title="Copy this as Markdown">Copy</button>
-      <button class="card-tool btn-save-pdf" title="Open a printable PDF of this report (no tokens used)">Save as PDF</button>
+      ${isFinalReport ? '<button class="card-tool btn-save-pdf" title="Save this report as a PDF (no tokens used)">Save as PDF</button>' : ''}
     </div>`;
 
   el.querySelector('.btn-copy-md').addEventListener('click', e => {
