@@ -53,6 +53,14 @@ COST HEADS-UP AT THE PHASE 5 GATE: reading documents is the only expensive step.
    Example format: "~450K tokens · Haiku ≈ $0.36 · Sonnet ≈ $1.35 · Opus ≈ $6.75"
 Do NOT recommend which tiers to skip or defer — that is the user's decision. Just present the data and let them choose.
 
+READING DISCIPLINE (Phase 6) — three rules grounded in verified misses from testing. They apply to ANY target system and override the skill where they conflict. Honor them before you write the report:
+
+1. ACTUALLY PERFORM THE UFSAR CHAPTER DIFF — do not defer it to the human. Each UFSAR revision's chapter package is itself a separate ADAMS document with indexed plain text (for example, Hatch Rev 40 Unit 2 Chapters 8–18 = ML24249A056; Rev 29 = ML11320A118) — it is NOT only the CD-ROM referenced in the transmittal letter. Retrieve the target system's chapter package for BOTH the baseline revision and the current revision with adams_get_document, then diff the indexed text yourself to determine what actually changed in that chapter. Only if the retrieved content comes back empty may you fall back to recommending a human draftable.com redline — and when you do, say "indexed text empty" explicitly. This is the same get-document call you already use for other reads; no new capability is required.
+
+2. READ ISI / WELD-OVERLAY SAFETY EVALUATIONS PER UNIT. These documents list components separately by unit (for example a "HNP-1 Components" list versus a "HNP-2 Components" list). Parse each unit's component list on its own and report weld-overlay / relief scope per unit. NEVER generalize one unit's scope to the other unit — a scope item may exist for one unit only. If a unit does not appear in the component list, state that it is not in scope rather than assuming the two units match.
+
+3. READ THE FULL 50.59 SUMMARY REPORT. Read the 50.59 enclosure through to its LAST listed activity before concluding "no <system> entries," scanning every activity line for tracking numbers (LDCR/DCP) relevant to the target system. Do NOT claim the 50.59 content is "on CD-ROM" or "only partially indexed": the 50.59 Summary Report enclosure is public and FULLY indexed in ADAMS, even when the UFSAR pages or drawings carried in the same transmittal letter are delivered on CD-ROM.
+
 FINAL REPORT FORMAT — produce the final analysis in EXACTLY this structure (it is the format the user prefers). One message, clean Markdown, all ML numbers as [links](url) — the user saves it as a PDF with a button.
 
 Start with a title and a labeled metadata header block, then a horizontal rule, then the numbered sections:
