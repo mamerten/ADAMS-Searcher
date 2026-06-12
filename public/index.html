@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adams Web Searcher</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <h1>Adams Web Searcher</h1>
+      <div class="model-toggle">
+        <label><input type="radio" name="model" value="claude-opus-4-8"> Opus 4.8</label>
+        <label><input type="radio" name="model" value="claude-sonnet-4-6" checked> Sonnet 4.6</label>
+        <label><input type="radio" name="model" value="claude-haiku-4-5-20251001"> Haiku 4.5</label>
+        <span class="model-note">Sonnet recommended · upgrade to Opus for maximum depth · <em>Haiku: basic functional testing only</em></span>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Query input — always at the top -->
+    <section id="sec-input" class="card">
+      <label class="field-label" for="query-input">What are you looking for?</label>
+      <textarea id="query-input" rows="4"
+        placeholder="Describe what you need in plain language — include the plant name and any date range.&#10;&#10;Example: feedwater design changes at Hatch since the last EPU"></textarea>
+      <div class="card-actions">
+        <button id="btn-submit" class="btn-primary">Interpret Request</button>
+      </div>
+    </section>
+
+    <!-- Everything else appends here in order -->
+    <div id="feed"></div>
+  </main>
+
+  <footer>
+    <span class="version">v0.1.0</span>
+    <span id="token-status"></span>
+    <span>Bug reports or feature requests? Email <a href="mailto:mmerten@enercon.com">mmerten@enercon.com</a></span>
+    <a href="#" id="how-link">How this works</a>
+  </footer>
+
+  <!-- How It Works modal -->
+  <dialog id="modal-how">
+    <div class="modal-inner">
+      <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
+      <h2>How Adams Web Searcher Works</h2>
+      <p>You type a plain-language request — plant, topic, and date range in your own words.
+        Claude then drives the search itself, using the firm's <strong>ADAMS search methodology
+        skill</strong> as its playbook and calling the NRC ADAMS API directly. It works in a
+        chat: each step appears below the last, and Claude <strong>stops at two checkpoints</strong>
+        to get your approval before doing expensive work.</p>
+
+      <h3>How a search unfolds</h3>
+      <dl>
+        <dt>Plan &amp; confirm</dt>
+        <dd>Claude interprets your request, resolves the plant to its NRC docket number(s),
+          and lays out its search plan — including, for a design-basis question, the five
+          document "buckets" the methodology calls for. It <strong>stops and waits</strong> for
+          you to reply <em>“go”</em> before searching.</dd>
+        <dt>Search &amp; triage</dt>
+        <dd>Claude runs the searches against the <strong>NRC ADAMS Public Search (APS) API</strong>,
+          then rates every result (★★★ HIGH / ★★ MEDIUM / ★ LOW / — NOISE) and shows the triage.
+          It <strong>stops again</strong> for your approval on which documents to open.</dd>
+        <dt>Read &amp; report</dt>
+        <dd>After you approve, Claude retrieves each document's indexed text, reads it, and
+          synthesizes a plain-language analysis with linked citations — the core deliverable.</dd>
+      </dl>
+
+      <p style="font-size:.8125rem;color:var(--text-muted);">At any checkpoint you can reply with a
+        correction instead of “go” — change the dockets, the date range, the ratings, or anything
+        else — and Claude adjusts before continuing.</p>
+
+      <h3>Data &amp; privacy</h3>
+      <ul>
+        <li>All AI runs on <strong>Mat's own paid Claude API tokens</strong>, server-side —
+          no Claude account needed to use this tool.</li>
+        <li>The Claude and ADAMS API keys are stored as encrypted Cloudflare secrets and
+          <strong>never reach your browser</strong>.</li>
+        <li>No searches or results are saved between sessions.</li>
+      </ul>
+
+      <h3>Model choice</h3>
+      <p><strong>Sonnet 4.6 is the default</strong> and handles most searches well.
+        Upgrade to Opus 4.8 for maximum depth and accuracy on complex queries.
+        Haiku is for basic functional testing only.</p>
+    </div>
+  </dialog>
+
+  <!-- Client-side PDF generation (vendored, no CDN/runtime network needed) -->
+  <script src="vendor/jspdf.umd.min.js"></script>
+  <script src="vendor/jspdf.plugin.autotable.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+node_modules/
+.dev.vars
+.wrangler/
+dist/
+
+# Editor atomic-write temp files (orphaned *.tmp.<pid>.<hash> artifacts)
+*.tmp.*
+
+# Local Claude Code config (personal, not shared)
+.claude/settings.local.json
+
+# Scratch / example report outputs — not part of the app
+zz - example reports/
