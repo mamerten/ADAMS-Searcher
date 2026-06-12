@@ -21,7 +21,7 @@ const $ = id => document.getElementById(id);
 const feed = () => $('feed');
 
 function getModel() {
-  return document.querySelector('input[name="model"]:checked')?.value || 'claude-opus-4-8';
+  return document.querySelector('input[name="model"]:checked')?.value || 'claude-sonnet-4-6';
 }
 
 // Local date/time for the report stamp (browser knows the right timezone).

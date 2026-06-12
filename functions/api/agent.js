@@ -46,11 +46,10 @@ HUMAN GATES — IMPORTANT: Honor the skill's two checkpoints. At Phase 3 (confir
 COST HEADS-UP AT THE PHASE 5 GATE: reading documents is the only expensive step. When you pause at the Phase 5 gate, give a short cost summary (3–4 lines) immediately before the "Reply 'go'" prompt:
 1. Break the pending document count by tier: ★★★ HIGH: N docs · ★★ MEDIUM: N docs · ★ LOW: N docs
 2. Estimate total new input tokens (assume ~10,000 tokens per document as a midpoint; note the range is ~5,000–15,000)
-3. Calculate a rough dollar cost using these approximate API input-token rates — show the figure for the current model (from GENERATION CONTEXT) and the other two for comparison:
+3. Calculate a rough dollar cost using these approximate API input-token rates — show the figure for the current model (from GENERATION CONTEXT) and the other for comparison:
    - Claude Haiku 4.5: ~$0.80 per 1M input tokens
    - Claude Sonnet 4.6: ~$3.00 per 1M input tokens
-   - Claude Opus 4.8: ~$15.00 per 1M input tokens
-   Example format: "~450K tokens · Haiku ≈ $0.36 · Sonnet ≈ $1.35 · Opus ≈ $6.75"
+   Example format: "~450K tokens · Haiku ≈ $0.36 · Sonnet ≈ $1.35"
 Do NOT recommend which tiers to skip or defer — that is the user's decision. Just present the data and let them choose.
 
 READING DISCIPLINE (Phase 6) — three rules grounded in verified misses from testing. They apply to ANY target system and override the skill where they conflict. Honor them before you write the report:
@@ -194,7 +193,7 @@ export async function onRequestPost({ request, env }) {
     return Response.json({ type: 'error', message: 'Invalid request body.' }, { status: 400 });
   }
 
-  const { messages, model = 'claude-opus-4-8', clientDateTime } = body;
+  const { messages, model = 'claude-sonnet-4-6', clientDateTime } = body;
   if (!Array.isArray(messages) || messages.length === 0) {
     return Response.json({ type: 'error', message: 'messages array is required.' }, { status: 400 });
   }
@@ -203,7 +202,6 @@ export async function onRequestPost({ request, env }) {
   // and the app knows exactly which model is running — so we supply both. The browser
   // sends its local date/time (correct timezone); fall back to server UTC if absent.
   const MODEL_NAMES = {
-    'claude-opus-4-8': 'Claude Opus 4.8',
     'claude-sonnet-4-6': 'Claude Sonnet 4.6',
     'claude-haiku-4-5-20251001': 'Claude Haiku 4.5',
   };
