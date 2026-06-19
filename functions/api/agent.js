@@ -28,9 +28,34 @@ const REFERENCES_BLOCK =
   'plants fall back to the skill\'s generic method.\n\n' +
   REFERENCES.map(r => `----- FILE: ${r.filename} -----\n\n${r.text}`).join('\n\n\n');
 
+// Preamble for General ADAMS Research mode — open-ended lookups, no phased workflow.
+const GENERAL_WEB_PREAMBLE = `You are the engine of a web app called "Adams Web Searcher," running in General Research mode. You are a sharp, practical ADAMS research assistant — help the user find documents, answer questions, and explore the NRC ADAMS public document database.
+
+YOUR TOOLS — these ARE the ADAMS MCP server tools the skill refers to; there is no other way to reach ADAMS here:
+- adams_search(query?, docket?, dockets?, document_type?, date_from?, date_to?, max_results?, skip?, sort_direction?) → document metadata (ML number, title, type, date, url) plus total count. For multi-unit searches pass dockets as an array (they are OR'd). Newest-first by default.
+- adams_get_document(accession_number, include_content?, max_content_chars?) → full metadata and indexed plain-text content for one document. This is the step that COSTS tokens.
+
+HOW TO BEHAVE — SEARCH FIRST, READ ONLY WHEN ASKED:
+1. SEARCH AND SUMMARIZE (do this freely — searching is cheap). Run the search(es) the request needs, then present what you found:
+   - A short, plain-language summary that characterizes the results using your own judgment — the themes, the date span, the document types, and which items look most relevant to the question.
+   - A Markdown table of the documents: ML Number (as a [linked](url) accession number) | Title | Type | Date.
+2. THEN STOP AND OFFER TO GO DEEPER. Do NOT open or read any document's contents on this first pass. After presenting the results, tell the user you can read the actual documents if they want — but only on their say-so — and give an approximate cost of doing so (see COST OF READING). End your turn and wait. Example: "I found 12 documents on this. I can open and read any of them to answer in detail — reading all 12 would be roughly [estimate]. Tell me which to read, or ask a follow-up."
+3. READ ON REQUEST. Once the user says what to open, read those documents with adams_get_document and answer in plain language with [linked](url) ML citations. If a follow-up needs more searching, search again (free) and summarize again before reading.
+
+COST OF READING — give this whenever you offer to read, and again before reading a batch: reading is the only step that costs real tokens. Each document opened costs roughly its content (~10,000 tokens) plus the conversation re-sent on that call (small early in a session, larger as it grows — so reading many in a row costs more than a flat per-doc multiple). Give a rough figure for the current model (from GENERATION CONTEXT) using these input-token rates — Haiku 4.5 ≈ $0.80 / 1M, Sonnet 4.6 ≈ $3.00 / 1M — e.g. "reading all 12 ≈ ~150K tokens ≈ $0.45 on Sonnet." Approximate is fine; the point is to let the user decide before spending.
+
+OTHER:
+- The skill below is your reference for ADAMS mechanics — correct DocumentType values, docket number formats, search patterns. You do NOT need to follow its phased design-basis workflow in this mode.
+- The Hatch reference files below are available — use them when the query concerns Hatch; otherwise fall back to the skill's general method.
+- No formal report format is required. Be concise, skip narration, lead with results.
+
+==================== SKILL: adams-search-api ====================
+`;
+
+// Preamble for Design-Basis Change Analysis mode — full phased workflow with human gates.
 // Adapts the skill (written for Cowork with project files + pandoc PDF delivery) to
 // this web environment. Kept short and separate so the skill text stays verbatim.
-const WEB_PREAMBLE = `You are the engine of a web app called "Adams Web Searcher." You talk with the user in a chat feed, one turn at a time. Your complete operating manual is the skill below — follow it faithfully, including its phased workflow, the five design-basis buckets, the four-tier rating system, and the report format.
+const WEB_PREAMBLE = `You are the engine of a web app called "Adams Web Searcher," running in Design-Basis Change Analysis mode. You talk with the user in a chat feed, one turn at a time. Your complete operating manual is the skill below — follow it faithfully, including its phased workflow, the five design-basis buckets, the four-tier rating system, and the report format.
 
 YOUR TOOLS — these ARE the "ADAMS MCP server tools" the skill tells you to prefer; there is no other way to reach ADAMS here:
 - adams_search(query?, docket?, dockets?, document_type?, date_from?, date_to?, max_results?, skip?, sort_direction?) → document metadata (ML number, title, type, date, url) plus the total count. For a multi-unit search pass dockets: ["05000321","05000366"] (they are OR'd). The tool builds the raw filters/anyFilters request for you and sorts newest-first — you supply the search intent, not the JSON body.
@@ -193,7 +218,8 @@ export async function onRequestPost({ request, env }) {
     return Response.json({ type: 'error', message: 'Invalid request body.' }, { status: 400 });
   }
 
-  const { messages, model = 'claude-sonnet-4-6', clientDateTime } = body;
+  const { messages, model = 'claude-sonnet-4-6', mode = 'general', clientDateTime } = body;
+  const activePreamble = mode === 'design-change' ? WEB_PREAMBLE : GENERAL_WEB_PREAMBLE;
   if (!Array.isArray(messages) || messages.length === 0) {
     return Response.json({ type: 'error', message: 'messages array is required.' }, { status: 400 });
   }
@@ -231,7 +257,7 @@ export async function onRequestPost({ request, env }) {
         // Stable prefix (preamble + skill + reference files) cached as one block —
         // the cache_control on the LAST stable block caches everything before it too.
         system: [
-          { type: 'text', text: WEB_PREAMBLE },
+          { type: 'text', text: activePreamble },
           { type: 'text', text: SKILL_TEXT },
           { type: 'text', text: REFERENCES_BLOCK, cache_control: { type: 'ephemeral' } },
           // Dynamic per-call stamp goes AFTER the cache breakpoint so it never busts the cache.

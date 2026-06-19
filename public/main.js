@@ -24,6 +24,17 @@ function getModel() {
   return document.querySelector('input[name="model"]:checked')?.value || 'claude-sonnet-4-6';
 }
 
+function getMode() {
+  return document.querySelector('input[name="mode"]:checked')?.value || 'general';
+}
+
+const PLACEHOLDERS = {
+  'general':
+    'Find a document, look up an amendment, or ask anything about ADAMS.\n\nExample: What are the latest license amendments for Hatch?',
+  'design-change':
+    'Describe the design-basis change to analyze — include the plant name and date range.\n\nExample: feedwater design changes at Hatch since 1/1/99',
+};
+
 // Local date/time for the report stamp (browser knows the right timezone).
 function nowStamp() {
   const d = new Date();
@@ -550,7 +561,7 @@ async function agentLoop() {
       const loader = appendLoading('Thinking…');
       let data;
       try {
-        data = await post('/api/agent', { messages: state.messages, model: getModel(), clientDateTime: nowStamp().dateTime });
+        data = await post('/api/agent', { messages: state.messages, model: getModel(), mode: getMode(), clientDateTime: nowStamp().dateTime });
       } catch (err) {
         loader.remove();
         appendError('Could not reach the server. Check your connection and try again.');
@@ -610,6 +621,13 @@ $('btn-submit').addEventListener('click', startConversation);
 
 $('query-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startConversation(); }
+});
+
+// Mode toggle — update textarea placeholder when mode changes
+document.querySelectorAll('input[name="mode"]').forEach(radio => {
+  radio.addEventListener('change', () => {
+    $('query-input').placeholder = PLACEHOLDERS[radio.value] || PLACEHOLDERS['general'];
+  });
 });
 
 // How It Works modal
