@@ -32,8 +32,21 @@ const REFERENCES_BLOCK =
 const GENERAL_WEB_PREAMBLE = `You are the engine of a web app called "Adams Web Searcher," running in General Research mode. You are a sharp, practical ADAMS research assistant — help the user find documents, answer questions, and explore the NRC ADAMS public document database.
 
 YOUR TOOLS — these ARE the ADAMS MCP server tools the skill refers to; there is no other way to reach ADAMS here:
-- adams_search(query?, docket?, dockets?, document_type?, date_from?, date_to?, max_results?, skip?, sort_direction?) → document metadata (ML number, title, type, date, url) plus total count. For multi-unit searches pass dockets as an array (they are OR'd). Newest-first by default.
+- adams_search(query?, title?, docket?, dockets?, document_type?, date_from?, date_to?, max_results?, skip?, sort_direction?) → document metadata (ML number, title, type, date, url) plus total count. 'query' = broad full-text (matches content + metadata); 'title' = match the document title only (precise). For multi-unit searches pass dockets as an array (they are OR'd). Newest-first by default.
 - adams_get_document(accession_number, include_content?, max_content_chars?) → full metadata and indexed plain-text content for one document. This is the step that COSTS tokens.
+
+RESOLVE THE PLANT CORRECTLY — NEVER DEFAULT TO ANOTHER PLANT:
+- Anchor every search to the docket(s) of the plant the USER named. Resolve the plant to its OWN NRC docket number(s) — e.g. Watts Bar Unit 1 = 05000390, Unit 2 = 05000391; Hatch Unit 1 = 05000321, Unit 2 = 05000366.
+- NEVER substitute Hatch (or any other plant) just because the skill examples or any reference files mention it. Any Hatch material in your context applies ONLY when the user is actually asking about Hatch.
+- If you are not certain of a plant's docket number, SAY SO and confirm with the user (or do a quick fleet-wide lookup — DocketNumber 'starts 05000' plus a distinctive title term). Do NOT guess, and do NOT fall back to a plant you happen to have reference data on.
+
+CLARIFY THE SEARCH WHEN IT'S AMBIGUOUS — then search:
+Before running, judge whether the request actually pins down HOW to search. A bare keyword + plant usually does not. Use your understanding of how ADAMS search works to ask one or two crisp questions first, then run the search the user chooses. Don't over-ask — if the scope is already clear, just search; one round of clarification is plenty.
+The most common ambiguity is WHERE a keyword should match:
+- query (full-text → ADAMS 'q'): matches the term ANYWHERE in the document's content + metadata. Broad — finds everything that mentions it, including incidental mentions.
+- title (→ ADAMS 'DocumentTitle contains'): matches only documents whose TITLE contains the term. Precise — best when the term names a system, program, or document series (e.g. an acronym) — but misses documents that discuss it without naming it in the title.
+Example — user: "Give me the Watts Bar 1 & 2 documents with ACAS." A good response BEFORE searching: "Quick check before I run this: do you want ACAS matched anywhere in the document text (broad), or only in document titles (precise)? I'll cover both units — dockets 05000390 and 05000391." Then search the way they pick.
+Also confirm units/dockets when unclear, and suggest a date range for very broad topics.
 
 HOW TO BEHAVE — SEARCH FIRST, READ ONLY WHEN ASKED:
 1. SEARCH AND SUMMARIZE (do this freely — searching is cheap). Run the search(es) the request needs, then present what you found:
@@ -46,7 +59,7 @@ COST OF READING — give this whenever you offer to read, and again before readi
 
 OTHER:
 - The skill below is your reference for ADAMS mechanics — correct DocumentType values, docket number formats, search patterns. You do NOT need to follow its phased design-basis workflow in this mode.
-- The Hatch reference files below are available — use them when the query concerns Hatch; otherwise fall back to the skill's general method.
+- Any Hatch-specific reference files in your context load ONLY for Hatch conversations — use them only when the user's plant is Hatch, never as a default for other plants.
 - No formal report format is required. Be concise, skip narration, lead with results.
 
 ==================== SKILL: adams-search-api ====================
@@ -58,7 +71,7 @@ OTHER:
 const WEB_PREAMBLE = `You are the engine of a web app called "Adams Web Searcher," running in Design-Basis Change Analysis mode. You talk with the user in a chat feed, one turn at a time. Your complete operating manual is the skill below — follow it faithfully, including its phased workflow, the five design-basis buckets, the four-tier rating system, and the report format.
 
 YOUR TOOLS — these ARE the "ADAMS MCP server tools" the skill tells you to prefer; there is no other way to reach ADAMS here:
-- adams_search(query?, docket?, dockets?, document_type?, date_from?, date_to?, max_results?, skip?, sort_direction?) → document metadata (ML number, title, type, date, url) plus the total count. For a multi-unit search pass dockets: ["05000321","05000366"] (they are OR'd). The tool builds the raw filters/anyFilters request for you and sorts newest-first — you supply the search intent, not the JSON body.
+- adams_search(query?, title?, docket?, dockets?, document_type?, date_from?, date_to?, max_results?, skip?, sort_direction?) → document metadata (ML number, title, type, date, url) plus the total count. 'query' searches full content + metadata; 'title' matches the DocumentTitle field only (ADAMS "DocumentTitle contains"). For a multi-unit search pass dockets: ["05000321","05000366"] (they are OR'd). The tool builds the raw filters/anyFilters request for you and sorts newest-first — you supply the search intent, not the JSON body.
 - adams_get_document(accession_number, include_content?, max_content_chars?) → one document's metadata and indexed plain-text content.
 
 ENVIRONMENT ADAPTATIONS (these override the skill where they conflict):
@@ -126,11 +139,12 @@ const TOOLS = [
   {
     name: 'adams_search',
     description:
-      "Search the NRC ADAMS public document library (metadata + full text). Combine a docket number (e.g. Hatch Unit 1 = 05000321) with optional keywords, document type, and a Document Date range. For multiple units, pass dockets as an array (OR'd together). Returns document metadata (ML number, title, type, date, url) and the total count. Newest-first. Use 'skip' to page large sets. Does NOT return document content — use adams_get_document for that.",
+      "Search the NRC ADAMS public document library. Use `query` for a broad full-text search (matches document content + metadata); use `title` to match the document TITLE only (precise). Combine with a docket number, document type, and a Document Date range. For multiple units, pass dockets as an array (OR'd together). Returns document metadata (ML number, title, type, date, url) and the total count. Newest-first. Use 'skip' to page large sets. Does NOT return document content — use adams_get_document for that.",
     input_schema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Free-text keywords searched across content + metadata (multiple words are ANDed; quote phrases). Optional — omit for a pure type/date search.' },
+        query: { type: 'string', description: 'Free-text keywords searched across content + metadata (multiple words are ANDed; quote phrases). Broad. Optional — omit for a pure type/date/title search.' },
+        title: { type: 'string', description: 'Match the document TITLE only (ADAMS "DocumentTitle contains"); multiple words are ANDed within the title. Precise alternative to `query`, which searches full content + metadata. May be combined with query, docket, document_type, and dates.' },
         docket: { type: 'string', description: 'A single docket number, e.g. 05000321. A full 05000XXX is matched exactly; a shorter prefix like 05000 is a fleet-wide sweep.' },
         dockets: { type: 'array', items: { type: 'string' }, description: 'Multiple docket numbers for a multi-unit search, e.g. ["05000321","05000366"]. OR\'d together — this is the right way to search two or more units at once.' },
         document_type: { type: 'string', description: 'Exact ADAMS DocumentType value, matched with "starts" (e.g. "License-Operating", "Updated Final Safety Analysis Report", "Code Relief or Alternative"). A wrong value silently returns zero results — use the verified values from the skill.' },
@@ -164,6 +178,7 @@ function summarizeSearch(input, result) {
   if (input.dockets?.length) bits.push(`dockets ${input.dockets.join(' / ')}`);
   else if (input.docket) bits.push(`docket ${input.docket}`);
   if (input.document_type) bits.push(`type "${input.document_type}"`);
+  if (input.title) bits.push(`title "${input.title}"`);
   if (input.query) bits.push(`q "${input.query}"`);
   if (input.date_from || input.date_to) bits.push(`${input.date_from || '…'} → ${input.date_to || '…'}`);
   const label = `adams_search · ${bits.join(' · ') || 'all documents'}`;
@@ -224,6 +239,15 @@ export async function onRequestPost({ request, env }) {
     return Response.json({ type: 'error', message: 'messages array is required.' }, { status: 400 });
   }
 
+  // The Hatch reference files are plant-specific. Inject them ONLY when the
+  // conversation actually concerns Hatch — otherwise they are pure noise that biases
+  // the model toward Hatch dockets (the real cause of a Watts Bar query coming back
+  // with Hatch results). Detect Hatch from the human's typed messages only (string
+  // content); tool-result messages are arrays and are intentionally skipped.
+  const mentionsHatch = messages.some(
+    m => m && m.role === 'user' && typeof m.content === 'string' && /hatch|hnp|05000321|05000366/i.test(m.content)
+  );
+
   // Authoritative report stamp. The model can't reliably know the wall-clock time,
   // and the app knows exactly which model is running — so we supply both. The browser
   // sends its local date/time (correct timezone); fall back to server UTC if absent.
@@ -240,6 +264,22 @@ export async function onRequestPost({ request, env }) {
     `Prepared (current date and time): ${stamp}\n` +
     `Model: ${friendlyModel}`;
 
+  // Assemble the system prompt. The stable prefix (preamble + skill + optional Hatch
+  // refs) is prompt-cached as one block — cache_control on the LAST stable block
+  // caches everything before it too. Hatch references are included only for Hatch
+  // conversations (see mentionsHatch).
+  const stableSystem = [
+    { type: 'text', text: activePreamble },
+    { type: 'text', text: SKILL_TEXT },
+  ];
+  if (mentionsHatch) stableSystem.push({ type: 'text', text: REFERENCES_BLOCK });
+  stableSystem[stableSystem.length - 1] = {
+    ...stableSystem[stableSystem.length - 1],
+    cache_control: { type: 'ephemeral' },
+  };
+  // The per-call stamp goes AFTER the cache breakpoint so it never busts the cache.
+  const systemBlocks = [...stableSystem, { type: 'text', text: GENERATION_CONTEXT }];
+
   let claudeResp;
   try {
     claudeResp = await fetch(ANTHROPIC_URL, {
@@ -252,17 +292,9 @@ export async function onRequestPost({ request, env }) {
       body: JSON.stringify({
         model,
         max_tokens: 16384,
-        // System is two blocks so the large, stable skill text can be prompt-cached
-        // across the many turns of one conversation (big cost saving).
-        // Stable prefix (preamble + skill + reference files) cached as one block —
-        // the cache_control on the LAST stable block caches everything before it too.
-        system: [
-          { type: 'text', text: activePreamble },
-          { type: 'text', text: SKILL_TEXT },
-          { type: 'text', text: REFERENCES_BLOCK, cache_control: { type: 'ephemeral' } },
-          // Dynamic per-call stamp goes AFTER the cache breakpoint so it never busts the cache.
-          { type: 'text', text: GENERATION_CONTEXT },
-        ],
+        // System prompt assembled above (preamble + skill + optional Hatch refs +
+        // per-call stamp); the stable prefix is prompt-cached as one block.
+        system: systemBlocks,
         tools: TOOLS,
         messages,
       }),
