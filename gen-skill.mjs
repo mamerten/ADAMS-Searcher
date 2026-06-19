@@ -18,7 +18,8 @@ const out =
   `// AUTO-GENERATED from ${SRC}. DO NOT EDIT BY HAND.\n` +
   `// Edit the Markdown source, then regenerate with: node gen-skill.mjs (or npm run dev).\n` +
   `// This is the model's system prompt and the deployed source of truth; the editable\n` +
-  `// source lives in this repo (no Cowork sync).\n` +
+  `// source lives in this repo (no Cowork sync). Originally forked from Mat's Claude\n` +
+  `// Cowork adams-search-api skill — the two have since diverged and now evolve apart.\n` +
   `export const SKILL_TEXT = ${JSON.stringify(body)};\n`;
 
 writeFileSync(OUT, out);

@@ -25,9 +25,12 @@ They never reach the browser. **Never commit `.dev.vars`.**
 ## The skill is the source of truth — and now lives in this repo
 
 The app does **not** paraphrase the search methodology in code. The real
-`adams-search-api` skill is embedded verbatim as the model's system prompt. It began as
-a copy of the `adams-search-api` Cowork skill, but it is **no longer synced from Cowork**
-— the team app owns its own copy in this repo and is free to diverge.
+`adams-search-api` skill is embedded verbatim as the model's system prompt. It was
+originally forked from Mat's Claude Cowork `adams-search-api` skill — the two share a
+common ancestor but have since **forked away from each other and now evolve
+independently**, which is half the fun: this team app is free to grow in directions the
+personal Cowork skill never will, and vice versa. This repo's copy is the source of
+truth for the app and is **no longer synced from Cowork**.
 
 You edit the skill as plain Markdown; a small build step bundles it into the JS the app
 imports. Both the skill and the references work exactly the same way — in-repo Markdown
