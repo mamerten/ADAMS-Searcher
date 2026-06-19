@@ -191,7 +191,9 @@ function appendAssistantText(text) {
       setTimeout(() => { b.textContent = o; }, 1500);
     });
   });
-  el.querySelector('.btn-save-pdf').addEventListener('click', () => reportToPdf(text));
+  if (isFinalReport) {
+    el.querySelector('.btn-save-pdf').addEventListener('click', () => reportToPdf(text));
+  }
 
   // Scroll to the TOP of the card so the user reads top-to-bottom after a long response.
   // Tool calls and loading indicators still use the default 'nearest' (scroll to bottom).
