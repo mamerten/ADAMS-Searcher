@@ -12,7 +12,7 @@ npm install
 npm run dev          # serves on http://localhost:8788
 ```
 
-`npm run dev` automatically re-bundles the reference files first (see below). You need a `.dev.vars` file (git-ignored) with the two secrets:
+`npm run dev` automatically re-bundles the skill + reference files first (see below). You need a `.dev.vars` file (git-ignored) with the two secrets:
 
 ```
 ANTHROPIC_API_KEY = "sk-ant-…"
@@ -25,40 +25,41 @@ They never reach the browser. **Never commit `.dev.vars`.**
 ## The skill is the source of truth — and now lives in this repo
 
 The app does **not** paraphrase the search methodology in code. The real
-`adams-search-api` skill is embedded verbatim as the model's system prompt, in
-`lib/skill.js` — and **that file is now hand-maintained in this repo.** It began as a
-copy of the `adams-search-api` Cowork skill, but the auto-sync tool (`gen-skill.mjs`)
-has been removed on purpose: this team app is meant to evolve independently of the
-personal Cowork skill, so the two can diverge.
+`adams-search-api` skill is embedded verbatim as the model's system prompt. It began as
+a copy of the `adams-search-api` Cowork skill, but it is **no longer synced from Cowork**
+— the team app owns its own copy in this repo and is free to diverge.
 
-| File | Source | How to change it |
+You edit the skill as plain Markdown; a small build step bundles it into the JS the app
+imports. Both the skill and the references work exactly the same way — in-repo Markdown
+source → generated `lib/*.js`:
+
+| Edit this (source) | Run this | Generates (deployed) |
 |---|---|---|
-| `lib/skill.js` | **hand-edited here** — no longer synced from Cowork | edit the file directly |
-| `lib/references.js` | every `.md` in `references/` | edit/add a `.md`, then `npm run sync-refs` |
+| `skill/adams-search-api.md` | `npm run sync-skill` | `lib/skill.js` |
+| any `.md` in `references/` | `npm run sync-refs` | `lib/references.js` |
 
-The reference bundle still auto-builds from the in-repo `references/` folder (it has no
-external dependency): `npm run dev` runs `npm run sync-refs` for you via the `predev`
-hook. To update a reference file, drop the new `.md` into `references/` and the next run
-bundles it.
+Both sources are **in this repo** — neither reads from Cowork or any external path.
+`npm run dev` runs `npm run sync` (both generators) for you via the `predev` hook, so
+local dev always reflects your latest edits. You rarely need to run them by hand.
 
 ## Shipping a skill change to production
 
-The skill lives only in `lib/skill.js`, so shipping a change is a normal edit-commit-push:
-
 ```
-# edit lib/skill.js directly, then:
-git add lib/skill.js
+# 1. edit skill/adams-search-api.md (plain Markdown)
+npm run sync-skill           # regenerate lib/skill.js (or just start the dev server)
+git add skill/adams-search-api.md lib/skill.js   # commit BOTH the source and the artifact
 git commit -m "Skill: <what changed>"
 git push                     # Cloudflare Pages auto-deploys from the connected repo
 ```
 
-The committed `lib/skill.js` is exactly what deploys — there is no build step that
-regenerates it, and Cloudflare has nothing else to rebuild it from. What you commit is
-what ships.
+`lib/skill.js` is the committed artifact that actually deploys — Cloudflare's build
+servers run no generator, so whatever `lib/skill.js` you push is exactly what ships. If
+you edit the `.md` but forget to regenerate, you'll commit a stale `lib/skill.js`;
+`npm run dev` regenerates it for you, which is the easy safeguard.
 
-> **Committed, not ignored:** `lib/skill.js` and `lib/references.js` are intentionally
-> tracked in git. They are the deployable source of truth — do not add them to
-> `.gitignore`.
+> **Committed, not ignored:** the Markdown sources (`skill/`, `references/`) **and** the
+> generated `lib/skill.js` / `lib/references.js` are all intentionally tracked in git.
+> The generated files are what deploy — do not add them to `.gitignore`.
 
 ## Deployment
 
