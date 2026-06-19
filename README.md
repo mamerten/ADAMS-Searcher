@@ -12,8 +12,7 @@ npm install
 npm run dev          # serves on http://localhost:8788
 ```
 
-`npm run dev` automatically re-syncs the bundled skill + reference files first (see
-below). You need a `.dev.vars` file (git-ignored) with the two secrets:
+`npm run dev` automatically re-bundles the reference files first (see below). You need a `.dev.vars` file (git-ignored) with the two secrets:
 
 ```
 ANTHROPIC_API_KEY = "sk-ant-…"
@@ -23,65 +22,39 @@ ADAMS_API_KEY     = "…"          # ADAMS APS subscription key
 These are read **server-side only**, in the Pages Functions under `functions/api/`.
 They never reach the browser. **Never commit `.dev.vars`.**
 
-## The skill is the source of truth — how it gets into the app
+## The skill is the source of truth — and now lives in this repo
 
 The app does **not** paraphrase the search methodology in code. The real
-`adams-search-api` skill is embedded verbatim as the model's system prompt. Two
-generated files carry that content:
+`adams-search-api` skill is embedded verbatim as the model's system prompt, in
+`lib/skill.js` — and **that file is now hand-maintained in this repo.** It began as a
+copy of the `adams-search-api` Cowork skill, but the auto-sync tool (`gen-skill.mjs`)
+has been removed on purpose: this team app is meant to evolve independently of the
+personal Cowork skill, so the two can diverge.
 
-| Generated file | Built from | By |
+| File | Source | How to change it |
 |---|---|---|
-| `lib/skill.js` | the installed `adams-search-api/SKILL.md` | `gen-skill.mjs` |
-| `lib/references.js` | every `.md` in `references/` | `gen-references.mjs` |
+| `lib/skill.js` | **hand-edited here** — no longer synced from Cowork | edit the file directly |
+| `lib/references.js` | every `.md` in `references/` | edit/add a `.md`, then `npm run sync-refs` |
 
-`gen-skill.mjs` auto-discovers the **newest** `SKILL.md` under
-`%APPDATA%\Claude\…\skills-plugin` — no hard-coded path. Run the sync manually with:
+The reference bundle still auto-builds from the in-repo `references/` folder (it has no
+external dependency): `npm run dev` runs `npm run sync-refs` for you via the `predev`
+hook. To update a reference file, drop the new `.md` into `references/` and the next run
+bundles it.
 
-```
-npm run sync          # both skill + references
-npm run sync-skill    # skill only
-npm run sync-refs     # references only
-```
+## Shipping a skill change to production
 
-…but you rarely need to: `npm run dev` runs `npm run sync` for you (the `predev` hook),
-so local dev always reflects the latest skill.
-
-To update the **reference** files (e.g. the Hatch guides), drop the new `.md` into
-`references/` and the next `sync` bundles it.
-
-## Updating the skill, all the way to production
-
-This is the important part. There are **two** sync boundaries, and only the first is
-automatic:
+The skill lives only in `lib/skill.js`, so shipping a change is a normal edit-commit-push:
 
 ```
-  SKILL.md (in your Claude app data)        ← you edit this
-        │
-        │  npm run sync   (automatic on `npm run dev`)     ← BOUNDARY 1: automatic, local
-        ▼
-  lib/skill.js  (committed artifact)
-        │
-        │  git commit + git push  →  Cloudflare auto-deploy  ← BOUNDARY 2: MANUAL
-        ▼
-  Production
-```
-
-**Boundary 1 is automatic. Boundary 2 is not — and cannot be.** The source `SKILL.md`
-lives in your local Claude app data; that path does **not** exist on Cloudflare's build
-servers, so the cloud can never regenerate `lib/skill.js` itself. The committed
-`lib/skill.js` is what deploys. Therefore, to ship a skill change:
-
-```
-# 1. edit the skill in Claude, then:
-npm run sync                 # regenerate lib/skill.js (or just start the dev server)
-git add lib/skill.js         # commit the regenerated artifact
-git commit -m "Sync skill to Rev N"
+# edit lib/skill.js directly, then:
+git add lib/skill.js
+git commit -m "Skill: <what changed>"
 git push                     # Cloudflare Pages auto-deploys from the connected repo
 ```
 
-If you forget step 1, you'll commit a stale skill. The sync output prints the skill's
-revision line (e.g. `"ADAMS Public Search — API Method - Rev 5"`) so you can confirm
-what you're shipping.
+The committed `lib/skill.js` is exactly what deploys — there is no build step that
+regenerates it, and Cloudflare has nothing else to rebuild it from. What you commit is
+what ships.
 
 > **Committed, not ignored:** `lib/skill.js` and `lib/references.js` are intentionally
 > tracked in git. They are the deployable source of truth — do not add them to

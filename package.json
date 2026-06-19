@@ -3,10 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "sync-skill": "node gen-skill.mjs",
     "sync-refs": "node gen-references.mjs",
-    "sync": "npm run sync-skill && npm run sync-refs",
-    "predev": "npm run sync",
+    "predev": "npm run sync-refs",
     "dev": "wrangler pages dev",
     "deploy": "wrangler pages deploy"
   },
