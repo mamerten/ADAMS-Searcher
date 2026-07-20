@@ -55,7 +55,7 @@ HOW TO BEHAVE — SEARCH FIRST, READ ONLY WHEN ASKED:
 2. THEN STOP AND OFFER TO GO DEEPER. Do NOT open or read any document's contents on this first pass. After presenting the results, tell the user you can read the actual documents if they want — but only on their say-so — and give an approximate cost of doing so (see COST OF READING). End your turn and wait. Example: "I found 12 documents on this. I can open and read any of them to answer in detail — reading all 12 would be roughly [estimate]. Tell me which to read, or ask a follow-up."
 3. READ ON REQUEST. Once the user says what to open, read those documents with adams_get_document and answer in plain language with [linked](url) ML citations. If a follow-up needs more searching, search again (free) and summarize again before reading.
 
-COST OF READING — give this whenever you offer to read, and again before reading a batch: reading is the only step that costs real tokens. Each document opened costs roughly its content (~10,000 tokens) plus the conversation re-sent on that call (small early in a session, larger as it grows — so reading many in a row costs more than a flat per-doc multiple). Give a rough figure for the current model (from GENERATION CONTEXT) using these input-token rates — Haiku 4.5 ≈ $0.80 / 1M, Sonnet 4.6 ≈ $3.00 / 1M — e.g. "reading all 12 ≈ ~150K tokens ≈ $0.45 on Sonnet." Approximate is fine; the point is to let the user decide before spending.
+COST OF READING — give this whenever you offer to read, and again before reading a batch: reading is the only step that costs real tokens. Each document opened costs roughly its content (~10,000 tokens) plus the conversation re-sent on that call (small early in a session, larger as it grows — so reading many in a row costs more than a flat per-doc multiple). Give a rough figure for the current model (from GENERATION CONTEXT) using these input-token rates — Haiku 4.5 ≈ $0.80 / 1M, Sonnet 5 ≈ $3.00 / 1M — e.g. "reading all 12 ≈ ~150K tokens ≈ $0.45 on Sonnet." Approximate is fine; the point is to let the user decide before spending.
 
 OTHER:
 - The skill below is your reference for ADAMS mechanics — correct DocumentType values, docket number formats, search patterns. You do NOT need to follow its phased design-basis workflow in this mode.
@@ -86,7 +86,7 @@ COST HEADS-UP AT THE PHASE 5 GATE: reading documents is the only expensive step.
 2. Estimate total Phase 6 input tokens. IMPORTANT: by Phase 6 every document-reading call re-sends the full conversation history (Phase 1–5: all searches, results, and triage) as non-cached input — typically 50,000–120,000 tokens per call — PLUS the document content (~10,000 tokens per document, range 5,000–15,000). Use ~80,000 tokens per document call as a realistic all-in midpoint: total ≈ N docs × 80,000 tokens. Do NOT use just N × 10,000 — that undercounts by roughly 8×.
 3. Calculate a rough dollar cost using these approximate API input-token rates — show the figure for the current model (from GENERATION CONTEXT) and the other for comparison:
    - Claude Haiku 4.5: ~$0.80 per 1M input tokens
-   - Claude Sonnet 4.6: ~$3.00 per 1M input tokens
+   - Claude Sonnet 5: ~$3.00 per 1M input tokens
    Example format: "~450K tokens · Haiku ≈ $0.36 · Sonnet ≈ $1.35"
 Do NOT recommend which tiers to skip or defer — that is the user's decision. Just present the data and let them choose.
 
@@ -233,7 +233,7 @@ export async function onRequestPost({ request, env }) {
     return Response.json({ type: 'error', message: 'Invalid request body.' }, { status: 400 });
   }
 
-  const { messages, model = 'claude-sonnet-4-6', mode = 'general', clientDateTime } = body;
+  const { messages, model = 'claude-sonnet-5', mode = 'general', clientDateTime } = body;
   const activePreamble = mode === 'design-change' ? WEB_PREAMBLE : GENERAL_WEB_PREAMBLE;
   if (!Array.isArray(messages) || messages.length === 0) {
     return Response.json({ type: 'error', message: 'messages array is required.' }, { status: 400 });
@@ -252,7 +252,7 @@ export async function onRequestPost({ request, env }) {
   // and the app knows exactly which model is running — so we supply both. The browser
   // sends its local date/time (correct timezone); fall back to server UTC if absent.
   const MODEL_NAMES = {
-    'claude-sonnet-4-6': 'Claude Sonnet 4.6',
+    'claude-sonnet-5': 'Claude Sonnet 5',
     'claude-haiku-4-5-20251001': 'Claude Haiku 4.5',
   };
   const friendlyModel = MODEL_NAMES[model] || model;

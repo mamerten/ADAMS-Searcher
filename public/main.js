@@ -21,7 +21,7 @@ const $ = id => document.getElementById(id);
 const feed = () => $('feed');
 
 function getModel() {
-  return document.querySelector('input[name="model"]:checked')?.value || 'claude-sonnet-4-6';
+  return document.querySelector('input[name="model"]:checked')?.value || 'claude-sonnet-5';
 }
 
 function getMode() {
