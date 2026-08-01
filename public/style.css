@@ -732,6 +732,7 @@ footer a:hover { color: var(--text); }
    never renders as a circle/dot (the symptom seen in Edge). */
 .mode-selector {
   display: inline-flex;
+  flex-wrap: wrap;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 7px;
@@ -771,6 +772,68 @@ footer a:hover { color: var(--text); }
   user-select: none;
   white-space: nowrap;
 }
+
+/* ─── RMP mode: file upload panel ─────────────────────────── */
+.rmp-upload {
+  margin-bottom: 1rem;
+  padding: .875rem;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.rmp-upload input[type="file"] {
+  display: block;
+  font-size: .8125rem;
+  color: var(--text-muted);
+}
+
+.rmp-file-list {
+  list-style: none;
+  margin-top: .625rem;
+  display: flex;
+  flex-direction: column;
+  gap: .375rem;
+}
+
+.rmp-file-item {
+  display: flex;
+  align-items: center;
+  gap: .625rem;
+  padding: .375rem .625rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: .8125rem;
+}
+
+.rmp-file-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rmp-file-status {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: .75rem;
+  text-align: right;
+}
+
+.rmp-file-error .rmp-file-status { color: var(--error-border); }
+
+.rmp-file-remove {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 .125rem;
+}
+.rmp-file-remove:hover { color: var(--error-border); }
 
 .mode-selector input[type="radio"]:checked + span {
   background: var(--accent);

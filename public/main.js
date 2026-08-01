@@ -12,6 +12,7 @@ const state = {
   messages: [],   // raw Anthropic message objects (user/assistant, incl. tool blocks)
   running: false, // a loop is in flight
   tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  rmpFiles: [],   // RMP mode: [{filename, text, error}] extracted client-side from uploads
 };
 
 const MAX_AUTOMATED_TURNS = 50; // safety cap on tool rounds per user message
@@ -33,6 +34,8 @@ const PLACEHOLDERS = {
     'Find a document, look up an amendment, or ask anything about ADAMS.\n\nExample: What are the latest license amendments for Hatch?',
   'design-change':
     'Describe the design-basis change to analyze — include the plant name and date range.\n\nExample: feedwater design changes at Hatch since 1/1/99',
+  'rmp':
+    'Describe the project — scope, who\'s involved, what concerns you — or just upload documents above.\n\nExample: New switchyard relay upgrade for a client substation, ~9 month schedule, one subcontractor doing the physical install.',
 };
 
 // Local date/time for the report stamp (browser knows the right timezone).
@@ -69,6 +72,89 @@ function clearFeed() {
   state.messages = [];
   state.tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   updateTokenStatus();
+  clearRmpFiles();
+}
+
+// ─── RMP mode: file upload + client-side text extraction ────────────────────
+// Uploaded project documents (.docx / .pdf) are extracted to plain text entirely in
+// the browser (mammoth.js for .docx, pdf.js for .pdf) and attached to the first
+// message as delimited text blocks — no server-side file handling, matching the
+// rest of the app's zero-storage design.
+
+async function extractDocxText(file) {
+  if (!window.mammoth) throw new Error('mammoth.js failed to load — try reloading the page.');
+  const arrayBuffer = await file.arrayBuffer();
+  const result = await window.mammoth.extractRawText({ arrayBuffer });
+  return result.value.trim();
+}
+
+async function extractPdfText(file) {
+  if (!window.pdfjsLib) throw new Error('pdf.js failed to load — try reloading the page.');
+  const arrayBuffer = await file.arrayBuffer();
+  const doc = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const pages = [];
+  for (let p = 1; p <= doc.numPages; p++) {
+    const page = await doc.getPage(p);
+    const content = await page.getTextContent();
+    pages.push(content.items.map(it => it.str).join(' '));
+  }
+  return pages.join('\n\n').trim();
+}
+
+async function extractFileText(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.docx')) return extractDocxText(file);
+  if (name.endsWith('.pdf')) return extractPdfText(file);
+  throw new Error('Unsupported file type — only .docx and .pdf are supported.');
+}
+
+function renderRmpFileList() {
+  const list = $('rmp-file-list');
+  if (!list) return;
+  list.innerHTML = state.rmpFiles.map((f, i) => `
+    <li class="rmp-file-item${f.error ? ' rmp-file-error' : ''}">
+      <span class="rmp-file-name">${escHtml(f.filename)}</span>
+      <span class="rmp-file-status">${f.loading ? 'reading…' : f.error ? escHtml(f.error) : `${f.text.length.toLocaleString()} chars`}</span>
+      <button type="button" class="rmp-file-remove" data-idx="${i}" aria-label="Remove ${escHtml(f.filename)}">&times;</button>
+    </li>`).join('');
+  list.querySelectorAll('.rmp-file-remove').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.rmpFiles.splice(Number(btn.dataset.idx), 1);
+      renderRmpFileList();
+    });
+  });
+}
+
+function clearRmpFiles() {
+  state.rmpFiles = [];
+  const input = $('rmp-files');
+  if (input) input.value = '';
+  renderRmpFileList();
+}
+
+async function handleRmpFilesSelected(fileList) {
+  for (const file of Array.from(fileList)) {
+    const entry = { filename: file.name, text: '', loading: true, error: null };
+    state.rmpFiles.push(entry);
+    renderRmpFileList();
+    try {
+      entry.text = await extractFileText(file);
+      if (!entry.text) entry.error = 'No extractable text found (scanned image?)';
+    } catch (err) {
+      entry.error = err.message || String(err);
+    } finally {
+      entry.loading = false;
+      renderRmpFileList();
+    }
+  }
+}
+
+// Build the delimited upload block appended to the user's first RMP message — the
+// exact "===== UPLOADED FILE: <filename> =====" format RMP_WEB_PREAMBLE expects.
+function buildRmpUploadBlock() {
+  const usable = state.rmpFiles.filter(f => f.text && !f.error);
+  if (!usable.length) return '';
+  return '\n\n' + usable.map(f => `===== UPLOADED FILE: ${f.filename} =====\n${f.text}`).join('\n\n');
 }
 
 // ─── Compact Markdown renderer ───────────────────────────────────────────────
@@ -181,18 +267,22 @@ function appendUserBubble(text) {
   appendToFeed(el);
 }
 
-function appendAssistantText(text) {
+function appendAssistantText(text, mode = 'general') {
   if (!text) return;
-  // Only show Save as PDF on the final report, which the preamble forces to start with "# " (H1 title).
-  // Intermediate messages (plan, triage, gate prompts) start with conversational text.
+  // Only show a save button on the final deliverable, which every mode's preamble
+  // forces to start with "# " (H1 title). Intermediate messages (plan, triage, gate
+  // prompts, RMP clarifying questions) start with conversational text.
   const isFinalReport = text.trimStart().startsWith('# ');
+  const isRmp = mode === 'rmp';
+  const saveLabel = isRmp ? 'Save as Word Doc' : 'Save as PDF';
+  const saveTitle = isRmp ? 'Save this plan as a Word document (no tokens used)' : 'Save this report as a PDF (no tokens used)';
   const el = document.createElement('div');
   el.className = 'card assistant-card';
   el.innerHTML = `
     <div class="md-body">${renderMarkdown(text)}</div>
     <div class="card-tools">
       <button class="card-tool btn-copy-md" title="Copy this as Markdown">Copy</button>
-      ${isFinalReport ? '<button class="card-tool btn-save-pdf" title="Save this report as a PDF (no tokens used)">Save as PDF</button>' : ''}
+      ${isFinalReport ? `<button class="card-tool btn-save-doc" title="${saveTitle}">${saveLabel}</button>` : ''}
     </div>`;
 
   el.querySelector('.btn-copy-md').addEventListener('click', e => {
@@ -203,7 +293,9 @@ function appendAssistantText(text) {
     });
   });
   if (isFinalReport) {
-    el.querySelector('.btn-save-pdf').addEventListener('click', () => reportToPdf(text));
+    el.querySelector('.btn-save-doc').addEventListener('click', () => {
+      if (isRmp) rmpToDocx(text); else reportToPdf(text);
+    });
   }
 
   // Scroll to the TOP of the card so the user reads top-to-bottom after a long response.
@@ -474,6 +566,280 @@ function reportToPdf(markdown) {
   doc.save(makeFilename(markdown));
 }
 
+// ─── RMP mode: client-side Word document generation ─────────────────────────
+// Fills the real QF-034.docx template (docxtemplater + pizzip, vendored) rather than
+// recreating it from scratch. The app — not the model — computes each row's
+// Green/Yellow/Red color deterministically from the fixed Likelihood x Impact matrix
+// (extracted from ENERCON's QF-034 template), so a model judgment mistake can never
+// produce a mismatched color. Uses ZERO model tokens; re-renders text already in hand.
+
+const RMP_RISK_MATRIX = {
+  H: { L: 'Yellow', M: 'Red',    H: 'Red' },
+  M: { L: 'Green',  M: 'Yellow', H: 'Red' },
+  L: { L: 'Green',  M: 'Green',  H: 'Yellow' },
+};
+const RMP_COLOR_HEX = { Green: '00B050', Yellow: 'FFFF00', Red: 'FF0000' };
+
+function normalizeLMH(raw) {
+  const s = (raw || '').trim().toLowerCase();
+  if (!s) return null;
+  if (s === 'l' || s.startsWith('low') || s.startsWith('unlikely')) return 'L';
+  if (s === 'm' || s.startsWith('med') || s === 'possible') return 'M';
+  if (s === 'h' || s.startsWith('high') || s.startsWith('likely')) return 'H';
+  const first = s[0] ? s[0].toUpperCase() : '';
+  return (first === 'L' || first === 'M' || first === 'H') ? first : null;
+}
+
+// Returns 'Green'|'Yellow'|'Red', or null if either rating couldn't be parsed —
+// never guesses a color it can't justify from the matrix.
+function resolveRiskColor(likelihoodRaw, impactRaw) {
+  const l = normalizeLMH(likelihoodRaw), i = normalizeLMH(impactRaw);
+  if (!l || !i) return null;
+  return RMP_RISK_MATRIX[l][i];
+}
+
+// Column lookup: exact header match preferred, falls back to a keyword match so
+// minor model phrasing drift still resolves correctly.
+function findRmpCol(headers, exact, mustInclude, mustExclude = []) {
+  const lower = headers.map(h => h.trim().toLowerCase());
+  const exactIdx = lower.indexOf(exact);
+  if (exactIdx !== -1) return exactIdx;
+  for (let i = 0; i < lower.length; i++) {
+    if (mustInclude.every(p => lower[i].includes(p)) && !mustExclude.some(p => lower[i].includes(p))) return i;
+  }
+  return -1;
+}
+
+// Locate the risk exposure table: the first pipe table whose header row includes a
+// "risk exposure" column (so any other incidental table is ignored).
+function parseRmpRiskTable(markdown) {
+  const lines = (markdown || '').split('\n');
+  const splitRow = r => r.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(c => c.trim());
+  for (let i = 0; i < lines.length - 1; i++) {
+    const line = lines[i];
+    if (!line.includes('|')) continue;
+    if (!/^\s*\|?[\s:|-]+\|?\s*$/.test(lines[i + 1]) || !lines[i + 1].includes('-')) continue;
+    const headers = splitRow(line);
+    if (!headers.some(h => /risk\s*exposure/i.test(h))) continue;
+    let j = i + 2;
+    const rows = [];
+    while (j < lines.length && lines[j].includes('|') && lines[j].trim()) { rows.push(splitRow(lines[j])); j++; }
+    return { headers, rows };
+  }
+  return null;
+}
+
+// Coversheet fields — RMP_WEB_PREAMBLE prescribes this exact "**Label:** value" format.
+function extractRmpCoversheet(markdown) {
+  const field = label => (markdown.match(new RegExp(`\\*\\*${label}:\\*\\*\\s*(.+)`, 'i')) || [])[1]?.trim() || '';
+  return {
+    projectNumber: field('Project Number') || 'TBD',
+    projectTitle: field('Project Title') || 'Untitled Project',
+    revisionNumber: field('Revision Number') || '0',
+    revisionDate: field('Revision Date') || nowStamp().date,
+  };
+}
+
+// Fills the real QF-034 template instead of recreating it — row heights, fonts,
+// spacing, the Distribution / Record-of-Revision / Risk-Analysis-Matrix / Compensating-
+// Action-Types boilerplate all come from the actual file untouched (that last one lives
+// in a table nested inside a cell, which is why an earlier from-scratch rebuild of this
+// mode missed it). The app fills only: Project Number/Title/Revision (coversheet + the
+// page-4 echo row) and the risk-exposure rows themselves, via a docxtemplater loop over
+// one templated table row. See public/assets/rmp/QF-034-fillable-template.docx and
+// rmp-reference/ for how the fillable template was derived from the source QF-034.docx.
+let _rmpTemplatePromise = null;
+function loadRmpTemplate() {
+  if (!_rmpTemplatePromise) {
+    _rmpTemplatePromise = fetch('assets/rmp/QF-034-fillable-template.docx').then(r => r.arrayBuffer());
+  }
+  return _rmpTemplatePromise;
+}
+
+// The template's "Risk Assessment Color" cell is tagged «{color}» (guillemets), not a
+// bare {color} — page 3's own Risk Analysis Matrix legend also has literal "Red"/
+// "Yellow"/"Green" text, so a bare-word search would risk re-shading the wrong cells.
+// This walks the rendered document.xml, finds each «Red»/«Yellow»/«Green» marker, sets
+// that cell's existing shading fill to match, and strips the marker brackets.
+function shadeRmpColorCells(zip) {
+  const path = 'word/document.xml';
+  const xml = zip.file(path).asText();
+  const ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const domDoc = new DOMParser().parseFromString(xml, 'application/xml');
+  const tcs = domDoc.getElementsByTagNameNS(ns, 'tc');
+  for (let i = 0; i < tcs.length; i++) {
+    const tc = tcs[i];
+    const ts = tc.getElementsByTagNameNS(ns, 't');
+    let combined = '';
+    for (let j = 0; j < ts.length; j++) combined += ts[j].textContent;
+    const m = combined.match(/^«(Red|Yellow|Green|\?)»$/);
+    if (!m) continue;
+    const color = m[1];
+    const hex = RMP_COLOR_HEX[color] || null;
+    if (hex) {
+      const tcPr = tc.getElementsByTagNameNS(ns, 'tcPr')[0];
+      const shd = tcPr && tcPr.getElementsByTagNameNS(ns, 'shd')[0];
+      if (shd) shd.setAttributeNS(ns, 'w:fill', hex);
+    }
+    if (ts.length) {
+      ts[0].textContent = color;
+      for (let j = 1; j < ts.length; j++) ts[j].textContent = '';
+    }
+  }
+  zip.file(path, new XMLSerializer().serializeToString(domDoc));
+}
+
+// Model dates arrive as free text (usually ISO YYYY-MM-DD, matching nowStamp()'s
+// convention) — Mat wants them shown as month-day-year in the actual document.
+// Falls back to the original string untouched if it can't confidently parse it,
+// rather than risk mangling something unexpected into "NaN-NaN-NaN".
+function toMonthDayYear(dateStr) {
+  const s = (dateStr || '').trim();
+  const pad = n => String(n).padStart(2, '0');
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return `${pad(m[2])}-${pad(m[3])}-${m[1]}`;
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (m) return `${pad(m[1])}-${pad(m[2])}-${m[3]}`;
+  const d = new Date(s);
+  if (!isNaN(d.getTime())) return `${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${d.getFullYear()}`;
+  return s;
+}
+
+// Is `keyword` (Quality/Scope/Cost/Schedule) one of the areas the model listed for
+// this row? Word-boundary match so "Cost" doesn't false-match inside another word.
+function rmpAreaChecked(areasStr, keyword) {
+  return new RegExp(`\\b${keyword}\\b`, 'i').test(areasStr || '');
+}
+
+// The template's Risk Impact cell already has 4 REAL Word checkbox content controls
+// (w14:checkbox — invisible to plain paragraph/run text APIs, same blind spot that
+// hid the nested Compensating Action Types table). Rather than draw our own boxes
+// (an earlier attempt using ☐/☒ text rendered as garbled tofu — Arial doesn't
+// reliably carry those glyphs), this leaves the real controls untouched and just
+// flips their checked state, keyed by each checkbox's fixed w:id (stable across every
+// cloned row, since docxtemplater clones the same template row's XML verbatim).
+const RMP_CHECKBOX_IDS = { quality: '-136496457', scope: '-1348404325', cost: '-244035928', schedule: '-1414457445' };
+function setRmpCheckboxes(zip, risks) {
+  const path = 'word/document.xml';
+  const xml = zip.file(path).asText();
+  const ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const w14ns = 'http://schemas.microsoft.com/office/word/2010/wordml';
+  const domDoc = new DOMParser().parseFromString(xml, 'application/xml');
+  const byKey = {};
+  for (const key of Object.keys(RMP_CHECKBOX_IDS)) byKey[key] = [];
+  const sdts = domDoc.getElementsByTagNameNS(ns, 'sdt');
+  for (let i = 0; i < sdts.length; i++) {
+    const idEl = sdts[i].getElementsByTagNameNS(ns, 'id')[0];
+    if (!idEl) continue;
+    const val = idEl.getAttributeNS(ns, 'val');
+    for (const key of Object.keys(RMP_CHECKBOX_IDS)) {
+      if (val === RMP_CHECKBOX_IDS[key]) byKey[key].push(sdts[i]);
+    }
+  }
+  risks.forEach((risk, i) => {
+    for (const key of Object.keys(RMP_CHECKBOX_IDS)) {
+      if (!risk[`${key}Checked`]) continue;
+      const sdt = byKey[key][i];
+      if (!sdt) continue;
+      const checkedEl = sdt.getElementsByTagNameNS(w14ns, 'checked')[0];
+      if (checkedEl) checkedEl.setAttributeNS(w14ns, 'w14:val', '1');
+      const t = sdt.getElementsByTagNameNS(ns, 't')[0];
+      if (t) t.textContent = '☒';
+    }
+  });
+  zip.file(path, new XMLSerializer().serializeToString(domDoc));
+}
+
+async function buildRmpDocxBlob(markdown) {
+  if (!window.PizZip || !window.docxtemplater) {
+    throw new Error('Word template library failed to load');
+  }
+  const cover = extractRmpCoversheet(markdown);
+  const revisionDate = toMonthDayYear(cover.revisionDate);
+  const parsed = parseRmpRiskTable(markdown);
+
+  const idx = parsed ? {
+    risk: findRmpCol(parsed.headers, 'risk exposure', ['risk', 'exposure']),
+    org: findRmpCol(parsed.headers, 'responsible organization', ['respons']),
+    likelihood: findRmpCol(parsed.headers, 'likelihood', ['likelihood']),
+    impact: findRmpCol(parsed.headers, 'impact', ['impact'], ['detail', 'area']),
+    areas: findRmpCol(parsed.headers, 'risk impact areas', ['area']),
+    impactDetails: findRmpCol(parsed.headers, 'risk impact details', ['detail'], ['action']),
+    actions: findRmpCol(parsed.headers, 'compensating actions', ['action'], ['detail']),
+    actionDetails: findRmpCol(parsed.headers, 'compensating action details', ['action', 'detail']),
+  } : null;
+  const cellText = (row, key) => (idx && idx[key] >= 0 ? (row[idx[key]] || '') : '');
+
+  const risks = (parsed ? parsed.rows : []).map((row, i) => {
+    const likelihood = cellText(row, 'likelihood'), impact = cellText(row, 'impact');
+    const color = resolveRiskColor(likelihood, impact) || '?';
+    const areas = cellText(row, 'areas');
+    const actions = cellText(row, 'actions'), actionDetails = cellText(row, 'actionDetails');
+    return {
+      no: String(i + 1),
+      risk: cellText(row, 'risk'),
+      org: cellText(row, 'org'),
+      likelihood, impact,
+      color, // the template's own cell text is «{color}» — don't double-wrap here
+      qualityChecked: rmpAreaChecked(areas, 'Quality'),
+      scopeChecked: rmpAreaChecked(areas, 'Scope'),
+      costChecked: rmpAreaChecked(areas, 'Cost'),
+      scheduleChecked: rmpAreaChecked(areas, 'Schedule'),
+      impactDetails: cellText(row, 'impactDetails'),
+      compActions: [actions ? `Actions: ${actions}` : '', actionDetails].filter(Boolean).join('\n'),
+    };
+  });
+  if (!risks.length) risks.push({
+    no: '', risk: '', org: '', likelihood: '', impact: '', color: '',
+    qualityChecked: false, scopeChecked: false, costChecked: false, scheduleChecked: false,
+    impactDetails: '', compActions: '',
+  });
+
+  const templateBuf = await loadRmpTemplate();
+  const zip = new window.PizZip(templateBuf);
+  const doc = new window.docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+  doc.render({
+    project_number: cover.projectNumber,
+    project_title: cover.projectTitle,
+    revision_number: cover.revisionNumber,
+    revision_date: revisionDate,
+    risks,
+  });
+
+  const outZip = doc.getZip();
+  setRmpCheckboxes(outZip, risks);
+  shadeRmpColorCells(outZip);
+  const blob = outZip.generate({
+    type: 'blob', compression: 'DEFLATE',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+  return { blob, cover };
+}
+
+function rmpDocxFilename(cover) {
+  const safe = s => (s || '').replace(/[/\\:*?"<>|]/g, '-').trim();
+  const title = safe(cover.projectTitle) || 'RMP';
+  return `${nowStamp().date} - ${title} - Qualitative RMP.docx`;
+}
+
+async function rmpToDocx(markdown) {
+  let blob, cover;
+  try {
+    ({ blob, cover } = await buildRmpDocxBlob(markdown));
+  } catch (e) {
+    alert('Word document generation failed — try reloading the page.');
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = rmpDocxFilename(cover);
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function appendToolCalls(toolCalls) {
   if (!toolCalls || !toolCalls.length) return;
   const el = document.createElement('div');
@@ -555,13 +921,15 @@ function addUsage(usage) {
 async function agentLoop() {
   state.running = true;
   let autoTurns = 0;
+  const mode = getMode(); // captured once so a mid-conversation toggle flip can't
+                           // mismatch the button on a message with the request that produced it
 
   try {
     while (true) {
       const loader = appendLoading('Thinking…');
       let data;
       try {
-        data = await post('/api/agent', { messages: state.messages, model: getModel(), mode: getMode(), clientDateTime: nowStamp().dateTime });
+        data = await post('/api/agent', { messages: state.messages, model: getModel(), mode, clientDateTime: nowStamp().dateTime });
       } catch (err) {
         loader.remove();
         appendError('Could not reach the server. Check your connection and try again.');
@@ -577,7 +945,7 @@ async function agentLoop() {
       }
 
       addUsage(data.usage);
-      appendAssistantText(data.text);
+      appendAssistantText(data.text, mode);
 
       // Append the assistant message to the conversation.
       state.messages.push({ role: 'assistant', content: data.assistant });
@@ -608,11 +976,14 @@ async function agentLoop() {
 // ─── Event wiring ─────────────────────────────────────────────────────────────
 function startConversation() {
   const q = $('query-input').value.trim();
-  if (!q || state.running) { $('query-input').focus(); return; }
+  const mode = getMode();
+  const uploadBlock = mode === 'rmp' ? buildRmpUploadBlock() : '';
+  if ((!q && !uploadBlock) || state.running) { $('query-input').focus(); return; }
 
+  const files = state.rmpFiles.slice(); // capture before clearFeed() wipes them
   clearFeed();
-  appendUserBubble(q);
-  state.messages = [{ role: 'user', content: q }];
+  appendUserBubble(q || `(${files.length} uploaded document${files.length === 1 ? '' : 's'}, no additional message)`);
+  state.messages = [{ role: 'user', content: q + uploadBlock }];
   $('query-input').value = '';
   agentLoop();
 }
@@ -623,11 +994,20 @@ $('query-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startConversation(); }
 });
 
-// Mode toggle — update textarea placeholder when mode changes
+// Mode toggle — update textarea placeholder + RMP upload panel visibility
 document.querySelectorAll('input[name="mode"]').forEach(radio => {
   radio.addEventListener('change', () => {
     $('query-input').placeholder = PLACEHOLDERS[radio.value] || PLACEHOLDERS['general'];
+    const isRmp = radio.value === 'rmp';
+    $('rmp-upload').classList.toggle('hidden', !isRmp);
+    if (!isRmp) clearRmpFiles(); // leaving RMP mode drops any staged uploads
   });
+});
+
+// RMP file upload — extract text client-side as soon as files are chosen
+$('rmp-files').addEventListener('change', e => {
+  handleRmpFilesSelected(e.target.files);
+  e.target.value = ''; // allow re-selecting a file / picking more without clearing the list
 });
 
 // How It Works modal

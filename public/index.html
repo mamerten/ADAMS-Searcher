@@ -26,6 +26,12 @@
       <div class="mode-selector">
         <label><input type="radio" name="mode" value="general" checked><span>General ADAMS Research</span></label>
         <label><input type="radio" name="mode" value="design-change"><span>Design-Basis Change Analysis</span></label>
+        <label><input type="radio" name="mode" value="rmp"><span>Risk Management Plan</span></label>
+      </div>
+      <div id="rmp-upload" class="rmp-upload hidden">
+        <label class="field-label" for="rmp-files">Upload project documents (optional — .docx or .pdf)</label>
+        <input type="file" id="rmp-files" multiple accept=".docx,.pdf">
+        <ul id="rmp-file-list" class="rmp-file-list"></ul>
       </div>
       <textarea id="query-input" rows="4"
         placeholder="Find a document, look up an amendment, or ask anything about ADAMS.&#10;&#10;Example: What are the latest license amendments for Hatch?"></textarea>
@@ -39,7 +45,7 @@
   </main>
 
   <footer>
-    <span class="version">v0.2.2</span>
+    <span class="version">v0.3.0</span>
     <span id="token-status"></span>
     <span>Bug reports or feature requests? Email <a href="mailto:mmerten@enercon.com">mmerten@enercon.com</a></span>
     <a href="https://github.com/mamerten/ADAMS-Searcher" target="_blank" rel="noopener">GitHub</a>
@@ -86,6 +92,18 @@
         correction instead of "go" — change the dockets, the date range, the ratings, or anything
         else — and Claude adjusts before continuing.</p>
 
+      <h3>Risk Management Plan</h3>
+      <p>Not related to ADAMS at all — this mode drafts a Qualitative Risk Management Plan
+        (QL-RMP) following ENERCON's QPM-003 procedure and QF-034 template. Describe the
+        project and/or upload source documents (.docx or .pdf); Claude identifies risk
+        exposures, rates Likelihood and Impact, and produces a risk exposure table. The app
+        computes each risk's color (Green/Yellow/Red) itself from a fixed matrix — Claude
+        never picks the color directly. If your first message doesn't give Claude enough to
+        work with, it will ask for more before drafting anything. The final draft downloads
+        as a real Word document with the button that appears on it — always a first-pass
+        draft meant for ENERCON's normal RMP review and approval process, not a signed,
+        approved plan.</p>
+
       <h3>Data &amp; privacy</h3>
       <ul>
         <li>All AI runs on <strong>Mat's own paid Claude API tokens</strong>, server-side —
@@ -104,6 +122,12 @@
   <!-- Client-side PDF generation (vendored, no CDN/runtime network needed) -->
   <script src="vendor/jspdf.umd.min.js"></script>
   <script src="vendor/jspdf.plugin.autotable.min.js"></script>
+  <!-- Client-side .docx read (mammoth) for uploads + fill-in-the-real-template
+       (pizzip + docxtemplater) for Risk Management Plan mode output -->
+  <script src="vendor/mammoth.browser.min.js"></script>
+  <script src="vendor/pizzip.min.js"></script>
+  <script src="vendor/docxtemplater.min.js"></script>
+  <script type="module" src="vendor/pdf-loader.mjs"></script>
   <script src="main.js"></script>
 </body>
 </html>

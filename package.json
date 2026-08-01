@@ -1,11 +1,12 @@
 {
   "name": "adams-web-searcher",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "private": true,
   "scripts": {
     "sync-skill": "node gen-skill.mjs",
     "sync-refs": "node gen-references.mjs",
-    "sync": "npm run sync-skill && npm run sync-refs",
+    "sync-rmp-refs": "node gen-rmp-reference.mjs",
+    "sync": "npm run sync-skill && npm run sync-refs && npm run sync-rmp-refs",
     "predev": "npm run sync",
     "dev": "wrangler pages dev",
     "deploy": "wrangler pages deploy"
