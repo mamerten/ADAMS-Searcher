@@ -5,16 +5,19 @@ in plain language. Claude drives the search server-side (on the operator's paid 
 tokens), using the real `adams-search-api` skill as its playbook and calling the ADAMS
 API directly. Output is a plain-language analysis the user can save as a bookmarked PDF.
 
-## Two modes
+## Three modes
 
-The tool operates in two modes, selected by a toggle above the query box:
+The tool operates in three modes, selected by a toggle above the query box:
 
 | Mode | What it does |
 |---|---|
 | **General ADAMS Research** | Open-ended lookups — find a document, check what's on file, read an amendment, answer a question. Claude searches and summarizes the results as a linked table, then **stops and asks what (if anything) to read** — with an approximate cost — so nothing is opened until you say so. No phases, no formal report. |
-| **Design-Basis Change Analysis** | Structured gap analysis — what changed in a system's licensing basis over a date range. Claude follows the five-bucket methodology with two human gates (confirm plan → search & triage → confirm documents → read & report). Produces a formal Design-Basis Change Analysis report with a Save as PDF button. |
+| **Design-Basis Change Analysis via ADAMS** | Structured gap analysis — what changed in a system's licensing basis over a date range. Claude follows the five-bucket methodology with two human gates (confirm plan → search & triage → confirm documents → read & report). Produces a formal Design-Basis Change Analysis report with a Save as PDF button. |
+| **Risk Management** | Not related to ADAMS at all — drafts an ENERCON Qualitative Risk Management Plan (QL-RMP) by filling in the real QF-034 Word template (via `docxtemplater`), following the QPM-003 procedure. Describe the project and/or upload source documents; Claude produces a risk-exposure table, and the app computes each risk's color and impact-area checkboxes deterministically rather than letting the model guess. Output is a real `.docx`, generated client-side. |
 
-The mode is passed to the server on each call and selects a different system-prompt preamble (`GENERAL_WEB_PREAMBLE` vs `WEB_PREAMBLE` in `functions/api/agent.js`). The ADAMS skill text and Hatch reference files are identical in both modes — only the operating instructions around them differ.
+The mode is passed to the server on each call. General ADAMS Research and Design-Basis Change Analysis via ADAMS share the same ADAMS skill text with different system-prompt preambles (`GENERAL_WEB_PREAMBLE` vs `WEB_PREAMBLE` in `functions/api/agent.js`) — only the operating instructions around the skill differ. Risk Management is a separate preamble (`RMP_WEB_PREAMBLE`) that never touches ADAMS or the skill at all.
+
+Risk Management mode's only reference material so far is ENERCON's own QPM-003 procedure and QF-034 template (`rmp-reference/`) — no worked example RMPs yet. Eventually we're going to get more samples there to make the logic a little better.
 
 ## Local development
 

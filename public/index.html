@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Adams Web Searcher</title>
+  <title>nuclearai-toolsofawesomeness</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <header>
     <div class="header-inner">
-      <h1>Adams Web Searcher</h1>
+      <h1>nuclearai-toolsofawesomeness</h1>
       <div class="model-toggle">
         <label><input type="radio" name="model" value="claude-sonnet-5" checked> Sonnet 5</label>
         <label><input type="radio" name="model" value="claude-haiku-4-5-20251001"> Haiku 4.5</label>
@@ -25,8 +25,8 @@
       <label class="field-label" for="query-input">What are you looking for?</label>
       <div class="mode-selector">
         <label><input type="radio" name="mode" value="general" checked><span>General ADAMS Research</span></label>
-        <label><input type="radio" name="mode" value="design-change"><span>Design-Basis Change Analysis</span></label>
-        <label><input type="radio" name="mode" value="rmp"><span>Risk Management Plan</span></label>
+        <label><input type="radio" name="mode" value="design-change"><span>Design-Basis Change Analysis via ADAMS</span></label>
+        <label><input type="radio" name="mode" value="rmp"><span>Risk Management</span></label>
       </div>
       <div id="rmp-upload" class="rmp-upload hidden">
         <label class="field-label" for="rmp-files">Upload project documents (optional — .docx or .pdf)</label>
@@ -56,7 +56,7 @@
   <dialog id="modal-how">
     <div class="modal-inner">
       <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
-      <h2>How Adams Web Searcher Works</h2>
+      <h2>How nuclearai-toolsofawesomeness Works</h2>
       <p>Type a question in plain language and choose a mode. Claude calls the
         <strong>NRC ADAMS Public Search (APS) API</strong> directly, server-side, and shows
         results in the chat. Each step appears below the last.</p>
@@ -68,7 +68,7 @@
         documents on its own: it stops there and asks what you'd like it to read — with an
         approximate cost — so you decide before any tokens are spent reading.</p>
 
-      <h3>Design-Basis Change Analysis</h3>
+      <h3>Design-Basis Change Analysis via ADAMS</h3>
       <p>For structured gap analysis — what changed in a system's licensing basis over a date
         range. Claude follows a five-bucket methodology and <strong>stops at two checkpoints</strong>
         to get your approval before doing expensive work.</p>
@@ -92,7 +92,7 @@
         correction instead of "go" — change the dockets, the date range, the ratings, or anything
         else — and Claude adjusts before continuing.</p>
 
-      <h3>Risk Management Plan</h3>
+      <h3>Risk Management</h3>
       <p>Not related to ADAMS at all — this mode drafts a Qualitative Risk Management Plan
         (QL-RMP) following ENERCON's QPM-003 procedure and QF-034 template. Describe the
         project and/or upload source documents (.docx or .pdf); Claude identifies risk
