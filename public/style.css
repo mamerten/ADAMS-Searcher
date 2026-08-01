@@ -759,10 +759,15 @@ footer a:hover { color: var(--text); }
   pointer-events: none;
 }
 
-/* The visible "button" is the span; the checked radio styles its sibling. */
+/* The visible "button" is the span; the checked radio styles its sibling. Labels
+   may run to two lines (e.g. "Design-Basis Change Analysis via ADAMS") — wrap and
+   center rather than forcing one line and clipping/overflowing. */
 .mode-selector label span {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-width: 9rem;
   padding: .375rem 1rem;
   font-size: .875rem;
   font-weight: 500;
@@ -770,7 +775,6 @@ footer a:hover { color: var(--text); }
   color: var(--text-muted);
   transition: background .15s, color .15s;
   user-select: none;
-  white-space: nowrap;
 }
 
 /* ─── RMP mode: file upload panel ─────────────────────────── */

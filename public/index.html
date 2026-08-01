@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>nuclearai-toolsofawesomeness</title>
+  <title>Nuclear AI Tools of Awesomeness</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <header>
     <div class="header-inner">
-      <h1>nuclearai-toolsofawesomeness</h1>
+      <h1>Nuclear AI Tools of Awesomeness</h1>
       <div class="model-toggle">
         <label><input type="radio" name="model" value="claude-sonnet-5" checked> Sonnet 5</label>
         <label><input type="radio" name="model" value="claude-haiku-4-5-20251001"> Haiku 4.5</label>
@@ -26,7 +26,7 @@
       <div class="mode-selector">
         <label><input type="radio" name="mode" value="general" checked><span>General ADAMS Research</span></label>
         <label><input type="radio" name="mode" value="design-change"><span>Design-Basis Change Analysis via ADAMS</span></label>
-        <label><input type="radio" name="mode" value="rmp"><span>Risk Management</span></label>
+        <label><input type="radio" name="mode" value="rmp"><span>Risk Management Plans</span></label>
       </div>
       <div id="rmp-upload" class="rmp-upload hidden">
         <label class="field-label" for="rmp-files">Upload project documents (optional — .docx or .pdf)</label>
@@ -56,7 +56,7 @@
   <dialog id="modal-how">
     <div class="modal-inner">
       <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
-      <h2>How nuclearai-toolsofawesomeness Works</h2>
+      <h2>How Nuclear AI Tools of Awesomeness Works</h2>
       <p>Type a question in plain language and choose a mode. Claude calls the
         <strong>NRC ADAMS Public Search (APS) API</strong> directly, server-side, and shows
         results in the chat. Each step appears below the last.</p>
@@ -92,7 +92,7 @@
         correction instead of "go" — change the dockets, the date range, the ratings, or anything
         else — and Claude adjusts before continuing.</p>
 
-      <h3>Risk Management</h3>
+      <h3>Risk Management Plans</h3>
       <p>Not related to ADAMS at all — this mode drafts a Qualitative Risk Management Plan
         (QL-RMP) following ENERCON's QPM-003 procedure and QF-034 template. Describe the
         project and/or upload source documents (.docx or .pdf); Claude identifies risk
