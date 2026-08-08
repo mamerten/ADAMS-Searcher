@@ -20,23 +20,14 @@
   </header>
 
   <main>
-    <!-- Query input — always at the top -->
-    <section id="sec-input" class="card">
+    <!-- Which of the 3 independent tools — always reachable, regardless of whether
+         the current one has an ongoing conversation. -->
+    <section id="sec-mode" class="card">
       <label class="field-label" for="query-input">What are you looking for?</label>
       <div class="mode-selector">
         <label><input type="radio" name="mode" value="general" checked><span>General ADAMS Research</span></label>
         <label><input type="radio" name="mode" value="design-change"><span>Design-Basis Change Analysis via ADAMS</span></label>
         <label><input type="radio" name="mode" value="rmp"><span>Risk Management Plans</span></label>
-      </div>
-      <div id="rmp-upload" class="rmp-upload hidden">
-        <label class="field-label" for="rmp-files">Upload project documents (optional — .docx or .pdf)</label>
-        <input type="file" id="rmp-files" multiple accept=".docx,.pdf">
-        <ul id="rmp-file-list" class="rmp-file-list"></ul>
-      </div>
-      <textarea id="query-input" rows="4"
-        placeholder="Find a document, look up an amendment, or ask anything about ADAMS.&#10;&#10;Example: What are the latest license amendments for Hatch?"></textarea>
-      <div class="card-actions">
-        <button id="btn-submit" class="btn-primary">Search</button>
       </div>
     </section>
 
@@ -46,6 +37,23 @@
     <div id="feed-general" class="feed"></div>
     <div id="feed-design-change" class="feed hidden"></div>
     <div id="feed-rmp" class="feed hidden"></div>
+
+    <!-- The composer — one persistent input at the BOTTOM of the thread, like any
+         other chat app. Handles the first message in a mode and every reply after
+         it; never appears mid-feed. -->
+    <section id="sec-composer" class="card composer">
+      <div id="rmp-upload" class="rmp-upload hidden">
+        <label class="field-label" for="rmp-files">Upload project documents (optional — .docx or .pdf)</label>
+        <input type="file" id="rmp-files" multiple accept=".docx,.pdf">
+        <ul id="rmp-file-list" class="rmp-file-list"></ul>
+      </div>
+      <textarea id="query-input" rows="3"
+        placeholder="Find a document, look up an amendment, or ask anything about ADAMS.&#10;&#10;Example: What are the latest license amendments for Hatch?"></textarea>
+      <div class="card-actions">
+        <button id="btn-submit" class="btn-primary">Search</button>
+        <button id="btn-new" class="btn-secondary hidden" title="Clear this mode's conversation and start over">New</button>
+      </div>
+    </section>
   </main>
 
   <footer>

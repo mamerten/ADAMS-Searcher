@@ -1,0 +1,15 @@
+# Cloudflare Pages custom headers. These are the actively-edited app files — force
+# the browser to always revalidate with the server (fast 304 when unchanged) instead
+# of serving a stale cached copy after a deploy. Vendored libraries aren't listed here
+# on purpose; they rarely change and are fine to cache normally.
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/main.js
+  Cache-Control: no-cache
+
+/style.css
+  Cache-Control: no-cache

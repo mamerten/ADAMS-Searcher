@@ -688,30 +688,16 @@ footer a:hover { color: var(--text); }
 .tool-label { font-family: ui-monospace, "Cascadia Code", "Liberation Mono", monospace; color: var(--text); }
 .tool-summary { color: var(--text-muted); font-style: italic; }
 
-/* Reply box (user's turn) */
-.reply-box {
-  display: flex;
-  gap: .6rem;
-  align-items: flex-end;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: .75rem;
-  box-shadow: var(--shadow-sm);
+/* The composer — one persistent input docked at the bottom of the thread (like any
+   other chat app), used for both the first message and every reply after it. Sticky
+   (not fixed) so it stays in normal document flow — no overlap math needed — but
+   still stays reachable near the bottom of the viewport once the feed grows past it. */
+.composer {
+  position: sticky;
+  bottom: 1rem;
+  z-index: 5;
 }
-.reply-text {
-  flex: 1;
-  padding: .5rem .65rem;
-  font-family: var(--font);
-  font-size: .9375rem;
-  background: var(--bg);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  resize: vertical;
-  line-height: 1.5;
-}
-.reply-text:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+#query-input:disabled { opacity: .6; cursor: not-allowed; }
 
 /* Per-card secondary action (Copy) — small and unobtrusive is right for this one. */
 .card-tools {

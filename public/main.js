@@ -322,7 +322,7 @@ function appendAssistantText(text, mode = getMode()) {
       if (isRmp) rmpToDocx(text); else reportToPdf(text);
     });
     // Remembered so a typed reply like "looks great, produce it" can trigger the same
-    // export without the user scrolling back up to find this button (see appendReplyBox).
+    // export without the user scrolling back up to find this button (see submitMessage).
     perModeState[mode].lastFinalReportText = text;
   }
 
@@ -939,9 +939,6 @@ function appendError(msg, mode = getMode()) {
   appendToFeed(el, 'nearest', mode);
 }
 
-// Reply box — shown whenever it's the user's turn (after the model ends a turn / gate).
-// `mode` is captured at creation time so a reply typed into (say) the RMP box always
-// continues the RMP conversation, even if the toggle gets flipped around afterward.
 // Matches a reply that's clearly just approving/asking for the deliverable rather than
 // a real revision request — either an explicit "produce/export/generate ... word/pdf/
 // report" anywhere in the message, or the WHOLE message being a short bare affirmation
@@ -949,51 +946,26 @@ function appendError(msg, mode = getMode()) {
 // string (not "anywhere") keeps "looks good but change risk 3" from false-triggering.
 const RMP_EXPORT_INTENT = /\b(produce|generate|export|download|create|make|build)\b[\s\S]{0,25}\b(word\s*doc(?:ument)?|docx?|pdf|report)\b|^(?:looks?\s+(?:good|great)|yes|yep|yup|sure|perfect|sounds?\s+good|do\s+it|go\s+ahead|please)[.!,\s]*$/i;
 
-function appendReplyBox(mode = getMode()) {
-  const el = document.createElement('div');
-  el.className = 'reply-box';
-  el.innerHTML = `
-    <textarea class="reply-text" rows="2" placeholder="Reply to continue — type 'go' to proceed, or give a correction…"></textarea>
-    <button class="btn-primary btn-reply-send">Send</button>`;
+// There's ONE persistent composer (upload panel + textarea + button), docked at the
+// bottom of the page — same as any other chat app — used for both the first message
+// in a mode and every reply after it. No more per-turn boxes appended into the feed.
+// This keeps it in sync with whichever mode is currently on screen: placeholder,
+// upload-panel visibility, button label ("Search" vs "Send"), and disabled state
+// while that mode's request is in flight.
+function syncComposerToMode() {
+  const mode = getMode();
+  const modeState = perModeState[mode];
+  const started = modeState.messages.length > 0;
 
-  const textarea = el.querySelector('.reply-text');
-  const btn = el.querySelector('.btn-reply-send');
+  $('query-input').placeholder = started
+    ? "Reply to continue — type 'go' to proceed, or give a correction…"
+    : (PLACEHOLDERS[mode] || PLACEHOLDERS['general']);
+  $('rmp-upload').classList.toggle('hidden', !(mode === 'rmp' && !started));
+  $('btn-submit').textContent = started ? 'Send' : 'Search';
+  $('btn-new').classList.toggle('hidden', !started);
 
-  const send = () => {
-    const modeState = perModeState[mode];
-    const txt = textarea.value.trim();
-    if (!txt || modeState.running) { textarea.focus(); return; }
-
-    appendUserBubble(txt, mode);
-    el.remove(); // this box's job is done — don't leave a disabled input sitting in the feed
-
-    // A final report is waiting to be exported and this reply is clearly just approval
-    // ("looks great", "produce the word doc", …) — handle it right here, same as
-    // clicking the button, so the user doesn't have to scroll back up to find it.
-    if (modeState.lastFinalReportText && RMP_EXPORT_INTENT.test(txt)) {
-      const reportText = modeState.lastFinalReportText;
-      if (mode === 'rmp') rmpToDocx(reportText); else reportToPdf(reportText);
-      appendAssistantText(
-        mode === 'rmp'
-          ? "Done — your Word document should be downloading now. Let me know if you'd like any changes."
-          : "Done — your PDF should be downloading now. Let me know if you'd like any changes.",
-        mode
-      );
-      appendReplyBox(mode);
-      return;
-    }
-
-    modeState.messages.push({ role: 'user', content: txt });
-    agentLoop(mode);
-  };
-
-  btn.addEventListener('click', send);
-  textarea.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-  });
-
-  appendToFeed(el, 'nearest', mode);
-  if (mode === getMode()) textarea.focus(); // don't steal focus for a hidden background mode
+  $('query-input').disabled = modeState.running;
+  $('btn-submit').disabled = modeState.running;
 }
 
 // Always reads the CURRENTLY VISIBLE mode's tokens — called after every mode switch
@@ -1027,6 +999,7 @@ function addUsage(usage, mode) {
 async function agentLoop(mode) {
   const modeState = perModeState[mode];
   modeState.running = true;
+  if (mode === getMode()) syncComposerToMode(); // disable the composer while this mode works
   let autoTurns = 0;
 
   try {
@@ -1038,14 +1011,12 @@ async function agentLoop(mode) {
       } catch (err) {
         loader.remove();
         appendError('Could not reach the server. Check your connection and try again.', mode);
-        appendReplyBox(mode);
         return;
       }
       loader.remove();
 
       if (!data || data.type === 'error') {
         appendError(data?.message || 'Unexpected error from the agent endpoint.', mode);
-        appendReplyBox(mode);
         return;
       }
 
@@ -1063,41 +1034,82 @@ async function agentLoop(mode) {
         autoTurns++;
         if (autoTurns >= MAX_AUTOMATED_TURNS) {
           appendError(`Stopped after ${MAX_AUTOMATED_TURNS} automated steps to keep things in check. Reply 'continue' to let it keep going.`, mode);
-          appendReplyBox(mode);
           return;
         }
         continue; // keep the loop going
       }
 
       // type === 'final' → model ended its turn (a gate, a question, or the answer).
-      appendReplyBox(mode);
+      // The persistent composer at the bottom is what the user replies in — nothing
+      // to append here.
       return;
     }
   } finally {
     modeState.running = false;
+    if (mode === getMode()) syncComposerToMode(); // re-enable + relabel Search→Send etc.
   }
 }
 
 // ─── Event wiring ─────────────────────────────────────────────────────────────
-function startConversation() {
-  const q = $('query-input').value.trim();
+// One persistent composer handles both the first message in a mode and every reply
+// after it — like any other chat app, not a "search box" that only fires once.
+function submitMessage() {
   const mode = getMode();
   const modeState = perModeState[mode];
-  const uploadBlock = mode === 'rmp' ? buildRmpUploadBlock() : '';
-  if ((!q && !uploadBlock) || modeState.running) { $('query-input').focus(); return; }
+  if (modeState.running) { $('query-input').focus(); return; }
 
-  const files = modeState.rmpFiles.slice(); // capture before clearFeed() wipes them
-  clearFeed(mode);
-  appendUserBubble(q || `(${files.length} uploaded document${files.length === 1 ? '' : 's'}, no additional message)`, mode);
-  perModeState[mode].messages = [{ role: 'user', content: q + uploadBlock }];
+  const txt = $('query-input').value.trim();
+  const started = modeState.messages.length > 0;
+
+  if (!started) {
+    // First message in this mode.
+    const uploadBlock = mode === 'rmp' ? buildRmpUploadBlock() : '';
+    if (!txt && !uploadBlock) { $('query-input').focus(); return; }
+    const files = modeState.rmpFiles.slice();
+    appendUserBubble(txt || `(${files.length} uploaded document${files.length === 1 ? '' : 's'}, no additional message)`, mode);
+    modeState.messages = [{ role: 'user', content: txt + uploadBlock }];
+    $('query-input').value = '';
+    agentLoop(mode);
+    return;
+  }
+
+  // Continuing an existing conversation.
+  if (!txt) { $('query-input').focus(); return; }
+  appendUserBubble(txt, mode);
   $('query-input').value = '';
+
+  // A final report is waiting to be exported and this reply is clearly just approval
+  // ("looks great", "produce the word doc", …) — handle it right here, same as
+  // clicking the export button, so the user doesn't have to scroll back up to find it.
+  if (modeState.lastFinalReportText && RMP_EXPORT_INTENT.test(txt)) {
+    const reportText = modeState.lastFinalReportText;
+    if (mode === 'rmp') rmpToDocx(reportText); else reportToPdf(reportText);
+    appendAssistantText(
+      mode === 'rmp'
+        ? "Done — your Word document should be downloading now. Let me know if you'd like any changes."
+        : "Done — your PDF should be downloading now. Let me know if you'd like any changes.",
+      mode
+    );
+    return;
+  }
+
+  modeState.messages.push({ role: 'user', content: txt });
   agentLoop(mode);
 }
 
-$('btn-submit').addEventListener('click', startConversation);
+$('btn-submit').addEventListener('click', submitMessage);
 
 $('query-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startConversation(); }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitMessage(); }
+});
+
+// Explicit reset — the only way to abandon a mode's conversation and start fresh
+// without switching away and back (which preserves it instead, by design).
+$('btn-new').addEventListener('click', () => {
+  clearFeed(getMode());
+  $('query-input').value = '';
+  syncComposerToMode();
+  $('query-input').focus();
 });
 
 // Mode toggle — three independent tools sharing one page. Switching just shows/hides
@@ -1106,14 +1118,11 @@ $('query-input').addEventListener('keydown', e => {
 document.querySelectorAll('input[name="mode"]').forEach(radio => {
   radio.addEventListener('change', () => {
     const mode = radio.value;
-    $('query-input').placeholder = PLACEHOLDERS[mode] || PLACEHOLDERS['general'];
-    const isRmp = mode === 'rmp';
-    $('rmp-upload').classList.toggle('hidden', !isRmp);
-
     MODES.forEach(m => feedEl(m).classList.toggle('hidden', m !== mode));
     state = perModeState[mode];
     updateTokenStatus();
-    if (isRmp) renderRmpFileList(); // refresh with whatever was staged before leaving
+    syncComposerToMode();
+    if (mode === 'rmp') renderRmpFileList(); // refresh with whatever was staged before leaving
   });
 });
 
@@ -1133,3 +1142,5 @@ window.addEventListener('unhandledrejection', e => {
   console.error('Unhandled rejection:', e.reason);
   appendError(`Unexpected error: ${e.reason?.message || String(e.reason)}`);
 });
+
+syncComposerToMode(); // set the composer's initial label/placeholder/visibility on load
