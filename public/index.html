@@ -40,12 +40,16 @@
       </div>
     </section>
 
-    <!-- Everything else appends here in order -->
-    <div id="feed"></div>
+    <!-- One independent feed per mode — switching the toggle shows/hides these, it
+         never clears them. Each mode keeps its own conversation until you start a
+         new search in it. -->
+    <div id="feed-general" class="feed"></div>
+    <div id="feed-design-change" class="feed hidden"></div>
+    <div id="feed-rmp" class="feed hidden"></div>
   </main>
 
   <footer>
-    <span class="version">v0.3.0</span>
+    <span class="version">v0.3.1</span>
     <span id="token-status"></span>
     <span>Bug reports or feature requests? Email <a href="mailto:mmerten@enercon.com">mmerten@enercon.com</a></span>
     <a href="https://github.com/mamerten/ADAMS-Searcher" target="_blank" rel="noopener">GitHub</a>
@@ -57,18 +61,24 @@
     <div class="modal-inner">
       <button class="modal-close" id="modal-close" aria-label="Close">&times;</button>
       <h2>How Nuclear AI Tools of Awesomeness Works</h2>
-      <p>Type a question in plain language and choose a mode. Claude calls the
-        <strong>NRC ADAMS Public Search (APS) API</strong> directly, server-side, and shows
-        results in the chat. Each step appears below the last.</p>
+      <p>This is Mat's personal grouping of independent AI tools, currently three of them,
+        all running on <strong>one Claude API key</strong>. They mostly don't depend on each
+        other — pick the one you need from the toggle above the query box, and switching
+        between them keeps each one's own conversation intact (nothing is dropped, it's just
+        out of view until you switch back). Each tool is described in its own section below.</p>
 
-      <h3>General ADAMS Research</h3>
+      <h3>1. General ADAMS Research</h3>
+      <p style="font-size:.8125rem;color:var(--text-muted);margin-top:-.35rem;">Uses the NRC
+        ADAMS Public Search (APS) API, server-side.</p>
       <p>For open-ended lookups — find a document, check what's on file for a plant, read an
         amendment, answer a question. Claude searches, summarizes what it found in plain
         language, and shows a linked table of results. It does <strong>not</strong> open
         documents on its own: it stops there and asks what you'd like it to read — with an
         approximate cost — so you decide before any tokens are spent reading.</p>
 
-      <h3>Design-Basis Change Analysis via ADAMS</h3>
+      <h3>2. Design-Basis Change Analysis via ADAMS</h3>
+      <p style="font-size:.8125rem;color:var(--text-muted);margin-top:-.35rem;">Also uses the
+        ADAMS API — a heavier, structured workflow than General ADAMS Research above.</p>
       <p>For structured gap analysis — what changed in a system's licensing basis over a date
         range. Claude follows a five-bucket methodology and <strong>stops at two checkpoints</strong>
         to get your approval before doing expensive work.</p>
@@ -92,17 +102,18 @@
         correction instead of "go" — change the dockets, the date range, the ratings, or anything
         else — and Claude adjusts before continuing.</p>
 
-      <h3>Risk Management Plans</h3>
-      <p>Not related to ADAMS at all — this mode drafts a Qualitative Risk Management Plan
-        (QL-RMP) following ENERCON's QPM-003 procedure and QF-034 template. Describe the
-        project and/or upload source documents (.docx or .pdf); Claude identifies risk
-        exposures, rates Likelihood and Impact, and produces a risk exposure table. The app
-        computes each risk's color (Green/Yellow/Red) itself from a fixed matrix — Claude
-        never picks the color directly. If your first message doesn't give Claude enough to
-        work with, it will ask for more before drafting anything. The final draft downloads
-        as a real Word document with the button that appears on it — always a first-pass
-        draft meant for ENERCON's normal RMP review and approval process, not a signed,
-        approved plan.</p>
+      <h3>3. Risk Management Plans</h3>
+      <p style="font-size:.8125rem;color:var(--text-muted);margin-top:-.35rem;">Fully
+        independent of the other two — does <strong>not</strong> touch ADAMS at all.</p>
+      <p>Drafts a Qualitative Risk Management Plan (QL-RMP) following ENERCON's QPM-003
+        procedure and QF-034 template. Describe the project and/or upload source documents
+        (.docx or .pdf); Claude identifies risk exposures, rates Likelihood and Impact, and
+        produces a risk exposure table. The app computes each risk's color (Green/Yellow/Red)
+        itself from a fixed matrix — Claude never picks the color directly. If your first
+        message doesn't give Claude enough to work with, it will ask for more before drafting
+        anything. The final draft downloads as a real Word document with the button that
+        appears on it — always a first-pass draft meant for ENERCON's normal RMP review and
+        approval process, not a signed, approved plan.</p>
 
       <h3>Data &amp; privacy</h3>
       <ul>
@@ -115,7 +126,8 @@
 
       <h3>Model choice</h3>
       <p><strong>Sonnet 5 is the default</strong> and handles most searches well.
-        Haiku is for learning the tool and basic functional testing only.</p>
+        Haiku is for learning the tool and basic functional testing only. Opus and Fable
+        aren't offered here — left out on purpose to keep costs down.</p>
     </div>
   </dialog>
 

@@ -8,18 +8,33 @@
 //   - lets the user reply "go" (or correct) to continue.
 
 // ─── State ────────────────────────────────────────────────────────────────────
-const state = {
-  messages: [],   // raw Anthropic message objects (user/assistant, incl. tool blocks)
-  running: false, // a loop is in flight
-  tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-  rmpFiles: [],   // RMP mode: [{filename, text, error}] extracted client-side from uploads
-};
+// Three fully independent tools sharing one page and one Claude API key. Each mode
+// gets its own {messages, running, tokens, rmpFiles} — switching the toggle never
+// mixes one mode's conversation into another's, in the browser OR in what gets sent
+// to /api/agent (each call only ever sends that mode's own `messages` array).
+function freshModeState() {
+  return {
+    messages: [],   // raw Anthropic message objects (user/assistant, incl. tool blocks)
+    running: false, // a loop is in flight
+    tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    rmpFiles: [],   // RMP mode: [{filename, text, error}] extracted client-side from uploads
+  };
+}
+const MODES = ['general', 'design-change', 'rmp'];
+const perModeState = {};
+MODES.forEach(m => { perModeState[m] = freshModeState(); });
+
+// `state` always aliases the CURRENTLY VISIBLE mode's state — safe for synchronous
+// UI code (click/change handlers), which only ever runs while that mode is on screen.
+// The async agent loop is the one place a mode switch could happen mid-flight, so it
+// captures its own `modeState` explicitly instead of relying on this alias.
+let state = perModeState[document.querySelector('input[name="mode"]:checked')?.value || 'general'];
 
 const MAX_AUTOMATED_TURNS = 50; // safety cap on tool rounds per user message
 
 // ─── DOM helpers ────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
-const feed = () => $('feed');
+const feedEl = mode => $('feed-' + mode);
 
 function getModel() {
   return document.querySelector('input[name="model"]:checked')?.value || 'claude-sonnet-5';
@@ -61,18 +76,28 @@ function escHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function appendToFeed(el, scrollBlock = 'nearest') {
-  feed().appendChild(el);
-  requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: scrollBlock }));
+function appendToFeed(el, scrollBlock = 'nearest', mode = getMode()) {
+  feedEl(mode).appendChild(el);
+  // Only auto-scroll if that mode's feed is the one actually on screen — scrolling a
+  // hidden background-mode feed would do nothing useful and could jank the layout.
+  if (mode === getMode()) {
+    requestAnimationFrame(() => el.scrollIntoView({ behavior: 'smooth', block: scrollBlock }));
+  }
   return el;
 }
 
-function clearFeed() {
-  feed().innerHTML = '';
-  state.messages = [];
-  state.tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
-  updateTokenStatus();
-  clearRmpFiles();
+// Resets ONE mode back to empty — used when starting a brand-new search in it.
+// Never touches the other two modes' state.
+function clearFeed(mode = getMode()) {
+  feedEl(mode).innerHTML = '';
+  perModeState[mode] = freshModeState();
+  if (mode === getMode()) {
+    state = perModeState[mode];
+    updateTokenStatus();
+    const input = $('rmp-files');
+    if (input) input.value = '';
+    renderRmpFileList();
+  }
 }
 
 // ─── RMP mode: file upload + client-side text extraction ────────────────────
@@ -123,13 +148,6 @@ function renderRmpFileList() {
       renderRmpFileList();
     });
   });
-}
-
-function clearRmpFiles() {
-  state.rmpFiles = [];
-  const input = $('rmp-files');
-  if (input) input.value = '';
-  renderRmpFileList();
 }
 
 async function handleRmpFilesSelected(fileList) {
@@ -205,10 +223,13 @@ function renderMarkdown(md) {
       while (i < lines.length && lines[i].includes('|') && lines[i].trim()) {
         rows.push(splitRow(lines[i])); i++;
       }
-      html += '<table class="md-table"><thead><tr>' +
+      // Wrapped in a scrollable container — wide tables (the RMP risk-exposure table
+      // can run 9 columns) get a horizontal scrollbar instead of being crushed to fit
+      // the card width, which is what made them look janky.
+      html += '<div class="table-scroll"><table class="md-table"><thead><tr>' +
         headers.map(hd => `<th>${inlineMd(hd)}</th>`).join('') + '</tr></thead><tbody>' +
         rows.map(r => '<tr>' + r.map(c => `<td>${inlineMd(c)}</td>`).join('') + '</tr>').join('') +
-        '</tbody></table>';
+        '</tbody></table></div>';
       continue;
     }
 
@@ -260,14 +281,14 @@ function renderMarkdown(md) {
 }
 
 // ─── Feed elements ──────────────────────────────────────────────────────────────
-function appendUserBubble(text) {
+function appendUserBubble(text, mode = getMode()) {
   const el = document.createElement('div');
   el.className = 'feed-bubble feed-bubble-user';
   el.textContent = text;
-  appendToFeed(el);
+  appendToFeed(el, 'nearest', mode);
 }
 
-function appendAssistantText(text, mode = 'general') {
+function appendAssistantText(text, mode = getMode()) {
   if (!text) return;
   // Only show a save button on the final deliverable, which every mode's preamble
   // forces to start with "# " (H1 title). Intermediate messages (plan, triage, gate
@@ -300,7 +321,7 @@ function appendAssistantText(text, mode = 'general') {
 
   // Scroll to the TOP of the card so the user reads top-to-bottom after a long response.
   // Tool calls and loading indicators still use the default 'nearest' (scroll to bottom).
-  appendToFeed(el, 'start');
+  appendToFeed(el, 'start', mode);
 }
 
 // ─── Client-side PDF with correctly-placed bookmarks ──────────────────────────
@@ -840,7 +861,7 @@ async function rmpToDocx(markdown) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function appendToolCalls(toolCalls) {
+function appendToolCalls(toolCalls, mode = getMode()) {
   if (!toolCalls || !toolCalls.length) return;
   const el = document.createElement('div');
   el.className = 'tool-calls';
@@ -850,27 +871,29 @@ function appendToolCalls(toolCalls) {
       <span class="tool-label">${escHtml(tc.label)}</span>
       <span class="tool-summary">${escHtml(tc.summary)}</span>
     </div>`).join('');
-  appendToFeed(el);
+  appendToFeed(el, 'nearest', mode);
 }
 
-function appendLoading(msg) {
+function appendLoading(msg, mode = getMode()) {
   const el = document.createElement('div');
   el.className = 'loading';
   el.innerHTML = `<div class="spinner"></div><span>${escHtml(msg)}</span>`;
-  return appendToFeed(el);
+  return appendToFeed(el, 'nearest', mode);
 }
 
-function appendError(msg) {
+function appendError(msg, mode = getMode()) {
   const el = document.createElement('div');
   el.className = 'card card-error';
   el.innerHTML = `
     <div class="section-title" style="color:var(--error-border)">Error</div>
     <div class="md-body">${renderMarkdown(msg)}</div>`;
-  appendToFeed(el);
+  appendToFeed(el, 'nearest', mode);
 }
 
 // Reply box — shown whenever it's the user's turn (after the model ends a turn / gate).
-function appendReplyBox() {
+// `mode` is captured at creation time so a reply typed into (say) the RMP box always
+// continues the RMP conversation, even if the toggle gets flipped around afterward.
+function appendReplyBox(mode = getMode()) {
   const el = document.createElement('div');
   el.className = 'reply-box';
   el.innerHTML = `
@@ -881,12 +904,13 @@ function appendReplyBox() {
   const btn = el.querySelector('.btn-reply-send');
 
   const send = () => {
+    const modeState = perModeState[mode];
     const txt = textarea.value.trim();
-    if (!txt || state.running) { textarea.focus(); return; }
+    if (!txt || modeState.running) { textarea.focus(); return; }
     btn.disabled = true; textarea.disabled = true;
-    appendUserBubble(txt);
-    state.messages.push({ role: 'user', content: txt });
-    agentLoop();
+    appendUserBubble(txt, mode);
+    modeState.messages.push({ role: 'user', content: txt });
+    agentLoop(mode);
   };
 
   btn.addEventListener('click', send);
@@ -894,12 +918,14 @@ function appendReplyBox() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
   });
 
-  appendToFeed(el);
-  textarea.focus();
+  appendToFeed(el, 'nearest', mode);
+  if (mode === getMode()) textarea.focus(); // don't steal focus for a hidden background mode
 }
 
+// Always reads the CURRENTLY VISIBLE mode's tokens — called after every mode switch
+// and after any token update that lands on the mode currently on screen.
 function updateTokenStatus() {
-  const t = state.tokens;
+  const t = perModeState[getMode()].tokens;
   const total = t.input + t.output;
   const el = $('token-status');
   if (!el) return;
@@ -908,68 +934,73 @@ function updateTokenStatus() {
   el.textContent = `Tokens this session: ${t.input.toLocaleString()} in · ${t.output.toLocaleString()} out${cached}`;
 }
 
-function addUsage(usage) {
+function addUsage(usage, mode) {
   if (!usage) return;
-  state.tokens.input     += usage.input     || 0;
-  state.tokens.output    += usage.output    || 0;
-  state.tokens.cacheRead += usage.cacheRead || 0;
-  state.tokens.cacheWrite+= usage.cacheWrite|| 0;
-  updateTokenStatus();
+  const t = perModeState[mode].tokens;
+  t.input      += usage.input      || 0;
+  t.output     += usage.output     || 0;
+  t.cacheRead  += usage.cacheRead  || 0;
+  t.cacheWrite += usage.cacheWrite || 0;
+  // Only refresh the visible counter if this update landed on the mode on screen —
+  // a background mode's usage still accumulates, it just doesn't repaint the footer.
+  if (mode === getMode()) updateTokenStatus();
 }
 
 // ─── The agentic loop ──────────────────────────────────────────────────────────
-async function agentLoop() {
-  state.running = true;
+// `mode` is passed in explicitly (never re-read via getMode() once running) and all
+// state goes through `modeState` — so a toggle flip mid-request can't ever mutate the
+// wrong mode's conversation or append a card into the wrong mode's feed.
+async function agentLoop(mode) {
+  const modeState = perModeState[mode];
+  modeState.running = true;
   let autoTurns = 0;
-  const mode = getMode(); // captured once so a mid-conversation toggle flip can't
-                           // mismatch the button on a message with the request that produced it
 
   try {
     while (true) {
-      const loader = appendLoading('Thinking…');
+      const loader = appendLoading('Thinking…', mode);
       let data;
       try {
-        data = await post('/api/agent', { messages: state.messages, model: getModel(), mode, clientDateTime: nowStamp().dateTime });
+        data = await post('/api/agent', { messages: modeState.messages, model: getModel(), mode, clientDateTime: nowStamp().dateTime });
       } catch (err) {
         loader.remove();
-        appendError('Could not reach the server. Check your connection and try again.');
-        appendReplyBox();
+        appendError('Could not reach the server. Check your connection and try again.', mode);
+        appendReplyBox(mode);
         return;
       }
       loader.remove();
 
       if (!data || data.type === 'error') {
-        appendError(data?.message || 'Unexpected error from the agent endpoint.');
-        appendReplyBox();
+        appendError(data?.message || 'Unexpected error from the agent endpoint.', mode);
+        appendReplyBox(mode);
         return;
       }
 
-      addUsage(data.usage);
+      addUsage(data.usage, mode);
       appendAssistantText(data.text, mode);
 
       // Append the assistant message to the conversation.
-      state.messages.push({ role: 'assistant', content: data.assistant });
+      modeState.messages.push({ role: 'assistant', content: data.assistant });
 
       if (data.type === 'tool_turn') {
-        appendToolCalls(data.toolCalls);
+        appendToolCalls(data.toolCalls, mode);
         // Feed tool results back as the next user message.
-        state.messages.push({ role: 'user', content: data.toolResults });
+        modeState.messages.push({ role: 'user', content: data.toolResults });
 
         autoTurns++;
         if (autoTurns >= MAX_AUTOMATED_TURNS) {
-          appendError(`Stopped after ${MAX_AUTOMATED_TURNS} automated steps to keep things in check. Reply 'continue' to let it keep going.`);
-          appendReplyBox();
+          appendError(`Stopped after ${MAX_AUTOMATED_TURNS} automated steps to keep things in check. Reply 'continue' to let it keep going.`, mode);
+          appendReplyBox(mode);
           return;
         }
         continue; // keep the loop going
       }
 
       // type === 'final' → model ended its turn (a gate, a question, or the answer).
-      appendReplyBox();
+      appendReplyBox(mode);
       return;
     }
   } finally {
-    state.running = false;
+    modeState.running = false;
   }
 }
 
@@ -977,15 +1008,16 @@ async function agentLoop() {
 function startConversation() {
   const q = $('query-input').value.trim();
   const mode = getMode();
+  const modeState = perModeState[mode];
   const uploadBlock = mode === 'rmp' ? buildRmpUploadBlock() : '';
-  if ((!q && !uploadBlock) || state.running) { $('query-input').focus(); return; }
+  if ((!q && !uploadBlock) || modeState.running) { $('query-input').focus(); return; }
 
-  const files = state.rmpFiles.slice(); // capture before clearFeed() wipes them
-  clearFeed();
-  appendUserBubble(q || `(${files.length} uploaded document${files.length === 1 ? '' : 's'}, no additional message)`);
-  state.messages = [{ role: 'user', content: q + uploadBlock }];
+  const files = modeState.rmpFiles.slice(); // capture before clearFeed() wipes them
+  clearFeed(mode);
+  appendUserBubble(q || `(${files.length} uploaded document${files.length === 1 ? '' : 's'}, no additional message)`, mode);
+  perModeState[mode].messages = [{ role: 'user', content: q + uploadBlock }];
   $('query-input').value = '';
-  agentLoop();
+  agentLoop(mode);
 }
 
 $('btn-submit').addEventListener('click', startConversation);
@@ -994,13 +1026,20 @@ $('query-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); startConversation(); }
 });
 
-// Mode toggle — update textarea placeholder + RMP upload panel visibility
+// Mode toggle — three independent tools sharing one page. Switching just shows/hides
+// each mode's own feed and re-points `state` at its own {messages, tokens, rmpFiles};
+// nothing is cleared, so flipping back to a mode restores exactly what was there.
 document.querySelectorAll('input[name="mode"]').forEach(radio => {
   radio.addEventListener('change', () => {
-    $('query-input').placeholder = PLACEHOLDERS[radio.value] || PLACEHOLDERS['general'];
-    const isRmp = radio.value === 'rmp';
+    const mode = radio.value;
+    $('query-input').placeholder = PLACEHOLDERS[mode] || PLACEHOLDERS['general'];
+    const isRmp = mode === 'rmp';
     $('rmp-upload').classList.toggle('hidden', !isRmp);
-    if (!isRmp) clearRmpFiles(); // leaving RMP mode drops any staged uploads
+
+    MODES.forEach(m => feedEl(m).classList.toggle('hidden', m !== mode));
+    state = perModeState[mode];
+    updateTokenStatus();
+    if (isRmp) renderRmpFileList(); // refresh with whatever was staged before leaving
   });
 });
 

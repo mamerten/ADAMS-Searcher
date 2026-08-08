@@ -478,7 +478,9 @@ footer a:hover { color: var(--text); }
 .version { font-family: monospace; }
 
 /* ─── Feed layout ─────────────────────────────────────── */
-#feed {
+/* One .feed per mode now (was a single #feed) — .hidden (display:none !important)
+   shows/hides them as the toggle switches, without ever clearing their content. */
+.feed {
   display: flex;
   flex-direction: column;
   gap: 1rem;
@@ -635,17 +637,29 @@ footer a:hover { color: var(--text); }
 }
 .md-body hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
 
+/* Wide tables (the RMP risk-exposure table can run 9 columns) scroll horizontally
+   inside their own container instead of being crushed to fit the card — that
+   crushing (every column squeezed to a sliver, text wrapping mid-word) is what
+   made them look janky. Narrow tables still stretch to fill the card as before. */
+.table-scroll {
+  overflow-x: auto;
+  margin: .7rem 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
 .md-table {
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   border-collapse: collapse;
   font-size: .85rem;
-  margin: .7rem 0;
+  margin: 0;
 }
 .md-table th, .md-table td {
   text-align: left;
   padding: .4rem .6rem;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
+  max-width: 22rem; /* let long cells wrap instead of stretching the table absurdly wide */
 }
 .md-table th {
   background: var(--bg);
@@ -654,6 +668,7 @@ footer a:hover { color: var(--text); }
   white-space: nowrap;
 }
 .md-table tr:hover td { background: var(--bg); }
+.md-table tr:last-child td { border-bottom: none; }
 
 /* Tool-call lines (between assistant messages) */
 .tool-calls {
