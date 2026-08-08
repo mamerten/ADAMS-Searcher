@@ -18,6 +18,8 @@ function freshModeState() {
     running: false, // a loop is in flight
     tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
     rmpFiles: [],   // RMP mode: [{filename, text, error}] extracted client-side from uploads
+    lastFinalReportText: null, // most recent final-report text — lets a typed "produce it"
+                                // reply export without the user hunting for the button
   };
 }
 const MODES = ['general', 'design-change', 'rmp'];
@@ -295,7 +297,7 @@ function appendAssistantText(text, mode = getMode()) {
   // prompts, RMP clarifying questions) start with conversational text.
   const isFinalReport = text.trimStart().startsWith('# ');
   const isRmp = mode === 'rmp';
-  const saveLabel = isRmp ? 'Save as Word Doc' : 'Save as PDF';
+  const saveLabel = isRmp ? 'Looks great! Produce Word Document' : 'Looks great! Produce PDF Report';
   const saveTitle = isRmp ? 'Save this plan as a Word document (no tokens used)' : 'Save this report as a PDF (no tokens used)';
   const el = document.createElement('div');
   el.className = 'card assistant-card';
@@ -303,8 +305,10 @@ function appendAssistantText(text, mode = getMode()) {
     <div class="md-body">${renderMarkdown(text)}</div>
     <div class="card-tools">
       <button class="card-tool btn-copy-md" title="Copy this as Markdown">Copy</button>
-      ${isFinalReport ? `<button class="card-tool btn-save-doc" title="${saveTitle}">${saveLabel}</button>` : ''}
-    </div>`;
+    </div>
+    ${isFinalReport ? `<div class="report-export">
+      <button class="btn-primary btn-save-doc" title="${saveTitle}">${saveLabel}</button>
+    </div>` : ''}`;
 
   el.querySelector('.btn-copy-md').addEventListener('click', e => {
     navigator.clipboard.writeText(text).then(() => {
@@ -317,7 +321,15 @@ function appendAssistantText(text, mode = getMode()) {
     el.querySelector('.btn-save-doc').addEventListener('click', () => {
       if (isRmp) rmpToDocx(text); else reportToPdf(text);
     });
+    // Remembered so a typed reply like "looks great, produce it" can trigger the same
+    // export without the user scrolling back up to find this button (see appendReplyBox).
+    perModeState[mode].lastFinalReportText = text;
   }
+
+  // RMP mode: show each row's computed risk level right in the chat table (the app
+  // computes it the same deterministic way it colors the Word doc's cells — the model
+  // never picks it) so a glance at the table shows which risks are severe.
+  if (isRmp) injectRmpRiskLevelColumn(el.querySelector('.md-body'), text);
 
   // Scroll to the TOP of the card so the user reads top-to-bottom after a long response.
   // Tool calls and loading indicators still use the default 'nearest' (scroll to bottom).
@@ -650,6 +662,43 @@ function parseRmpRiskTable(markdown) {
   return null;
 }
 
+const RMP_LEVEL_LABEL = { Green: 'Low', Yellow: 'Medium', Red: 'High' };
+
+// Inserts a computed "Risk Level" column into the CHAT-rendered risk table (not the
+// underlying markdown, not the Word doc) right after Impact — same deterministic
+// Likelihood x Impact matrix the app uses everywhere else, so what you see here always
+// matches what lands in the exported document. `bodyEl` is the .md-body just rendered.
+function injectRmpRiskLevelColumn(bodyEl, markdown) {
+  const parsed = parseRmpRiskTable(markdown);
+  if (!parsed || !bodyEl) return;
+  const likIdx = findRmpCol(parsed.headers, 'likelihood', ['likelihood']);
+  const impIdx = findRmpCol(parsed.headers, 'impact', ['impact'], ['detail', 'area']);
+  if (likIdx < 0 || impIdx < 0) return;
+
+  const tables = bodyEl.querySelectorAll('table.md-table');
+  for (const table of tables) {
+    const headerRow = table.querySelector('thead tr');
+    const headerCells = headerRow ? Array.from(headerRow.children) : [];
+    if (!headerCells.some(th => /risk\s*exposure/i.test(th.textContent))) continue; // not the risk table
+
+    const insertAt = impIdx + 1;
+    const th = document.createElement('th');
+    th.textContent = 'Risk Level';
+    headerRow.insertBefore(th, headerRow.children[insertAt] || null);
+
+    Array.from(table.querySelectorAll('tbody tr')).forEach((tr, i) => {
+      const row = parsed.rows[i];
+      const td = document.createElement('td');
+      const color = row ? resolveRiskColor(row[likIdx], row[impIdx]) : null;
+      td.innerHTML = color
+        ? `<span class="risk-badge risk-badge-${color.toLowerCase()}">${RMP_LEVEL_LABEL[color]}</span>`
+        : '?';
+      tr.insertBefore(td, tr.children[insertAt] || null);
+    });
+    break; // one risk table per report
+  }
+}
+
 // Coversheet fields — RMP_WEB_PREAMBLE prescribes this exact "**Label:** value" format.
 function extractRmpCoversheet(markdown) {
   const field = label => (markdown.match(new RegExp(`\\*\\*${label}:\\*\\*\\s*(.+)`, 'i')) || [])[1]?.trim() || '';
@@ -893,6 +942,13 @@ function appendError(msg, mode = getMode()) {
 // Reply box — shown whenever it's the user's turn (after the model ends a turn / gate).
 // `mode` is captured at creation time so a reply typed into (say) the RMP box always
 // continues the RMP conversation, even if the toggle gets flipped around afterward.
+// Matches a reply that's clearly just approving/asking for the deliverable rather than
+// a real revision request — either an explicit "produce/export/generate ... word/pdf/
+// report" anywhere in the message, or the WHOLE message being a short bare affirmation
+// ("looks good", "yes", "do it", …). Anchoring the affirmations to the full trimmed
+// string (not "anywhere") keeps "looks good but change risk 3" from false-triggering.
+const RMP_EXPORT_INTENT = /\b(produce|generate|export|download|create|make|build)\b[\s\S]{0,25}\b(word\s*doc(?:ument)?|docx?|pdf|report)\b|^(?:looks?\s+(?:good|great)|yes|yep|yup|sure|perfect|sounds?\s+good|do\s+it|go\s+ahead|please)[.!,\s]*$/i;
+
 function appendReplyBox(mode = getMode()) {
   const el = document.createElement('div');
   el.className = 'reply-box';
@@ -907,8 +963,26 @@ function appendReplyBox(mode = getMode()) {
     const modeState = perModeState[mode];
     const txt = textarea.value.trim();
     if (!txt || modeState.running) { textarea.focus(); return; }
-    btn.disabled = true; textarea.disabled = true;
+
     appendUserBubble(txt, mode);
+    el.remove(); // this box's job is done — don't leave a disabled input sitting in the feed
+
+    // A final report is waiting to be exported and this reply is clearly just approval
+    // ("looks great", "produce the word doc", …) — handle it right here, same as
+    // clicking the button, so the user doesn't have to scroll back up to find it.
+    if (modeState.lastFinalReportText && RMP_EXPORT_INTENT.test(txt)) {
+      const reportText = modeState.lastFinalReportText;
+      if (mode === 'rmp') rmpToDocx(reportText); else reportToPdf(reportText);
+      appendAssistantText(
+        mode === 'rmp'
+          ? "Done — your Word document should be downloading now. Let me know if you'd like any changes."
+          : "Done — your PDF should be downloading now. Let me know if you'd like any changes.",
+        mode
+      );
+      appendReplyBox(mode);
+      return;
+    }
+
     modeState.messages.push({ role: 'user', content: txt });
     agentLoop(mode);
   };

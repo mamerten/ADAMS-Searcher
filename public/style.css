@@ -713,7 +713,7 @@ footer a:hover { color: var(--text); }
 }
 .reply-text:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* Per-card actions (Copy / Save as PDF) */
+/* Per-card secondary action (Copy) — small and unobtrusive is right for this one. */
 .card-tools {
   display: flex;
   gap: .4rem;
@@ -736,6 +736,35 @@ footer a:hover { color: var(--text); }
   transition: color .15s, border-color .15s;
 }
 .card-tool:hover { color: var(--accent); border-color: var(--accent); }
+
+/* The export button (Produce Word Doc / PDF) is the whole point of a final report —
+   full-strength primary color, always visible (no hover-to-reveal), its own row. */
+.report-export {
+  margin-top: .85rem;
+  padding-top: .85rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+.report-export .btn-save-doc {
+  font-size: .9375rem;
+  font-weight: 600;
+  padding: .7rem 1.75rem;
+}
+
+/* RMP chat-table risk-level badges — Low/Medium/High, colored to match the same
+   matrix that shades the exported Word document's cells. */
+.risk-badge {
+  display: inline-block;
+  padding: .15rem .55rem;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.risk-badge-green  { background: #00B050; color: #fff; }
+.risk-badge-yellow { background: #FFF3B0; color: #7A5B00; }
+.risk-badge-red    { background: #FF0000; color: #fff; }
 
 /* Token status in footer */
 #token-status { font-family: monospace; font-size: .7rem; color: var(--text-muted); }
